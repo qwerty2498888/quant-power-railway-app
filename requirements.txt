@@ -1,6 +1,5 @@
-
-flask_caching 
-dash 
-yfinance 
-pandas 
-plotly 
+dash==2.14.2
+plotly==5.17.0
+pandas==2.0.3
+yfinance==0.2.18
+Flask-Caching==2.0.2
