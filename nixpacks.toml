@@ -1,0 +1,5 @@
+﻿[phases.setup]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "python diagnostic_app.py"
