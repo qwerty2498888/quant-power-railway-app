@@ -3,12 +3,15 @@ import dash
 from dash import dcc, html, Input, Output, State, dash_table
 import plotly.graph_objs as go
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import timedelta
 from flask_caching import Cache
 from urllib.parse import parse_qs
+import os
+from datetime import datetime
 
 # Инициализация Dash приложения
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
+server = app.server
 
 # Настройка кэширования
 cache = Cache(app.server, config={
@@ -18,23 +21,214 @@ cache = Cache(app.server, config={
 })
 cache.clear()
 
-# Список разрешенных пользователей Telegram
-ALLOWED_USERS = ["313", "@cronoq", "@avg1987", "@VictorIziumschii", "@robertcz84", "@tatifad", "@Andrey_Maryev", "@Stepanov_SV", "@martin5711", "@dkirhlarov", "@o_stmn", "@Jus_Urfin", "@IgorM215", "@Lbanki", "@artjomeif", "@ViktorAlenchikov", "@PavelZam", "@ruslan_rms", "@kserginfo", "@Yan_yog", "@IFin82", "@niqo5586", "@d200984", "@Zhenya_jons", "@Chili_palmer", "375291767178", "79122476671", "@manival515", "@isaevmike", "@ilapirova", "@rra3483", "@armen_lalaian", "@olegstamatov", "@Banderas111", "@andreymiamimoscow", "436642455545", "@gyuszijaro", "@helenauvarova", "@Rewire", "@garik_bale", "@KJurginiene", "@kiloperza", "@YLT777", "@Sea_Master_07", "380958445987", "@Yuriy_Kutafin", "@di_floww", "@dokulakov", "@travelpro5", "@yrchik91", "@euko2", "@Wrt666", "@Galexprivate", "@DrWinsent", "@rishat11kh", "37123305995", "@Yura_Bok", "@FaidenSA", "79956706060", "358451881908", "@jonytvester", "79160779977", "@maxpower3674", "@maxpower4566", "@maxpower7894", "@maxpower6635", "@Renat258", "@bagh0lder", "79057666666", "@Bapik_t", "@SergeyM072", "380672890848", "@Sergey_Bill", "@dmitrylan", "@Qwertyid", "@puzyatkin_kolbosyatkin", "@mrseboch", "79219625180", "@Vitrade134", "@Vaness_IB", "@iririchs", "@Natalijapan", "@ElenaRussianSirena", "@Andrii36362", "@Kuzmitskiy_Maksim", "79281818128", "@Romich408", "@Maksim8022", "@Nikitin_Kirill8", "@art_kirakozov", "@davribr", "14253942333", "@Korney21", "@Andrei_Pishvanov", "@iahis", "@Aik99999", "37126548141", "@vadim_gr77", "@makoltsov", "@alexndsn", "@option2037", "@futuroid", "79852696802", "@Serge_Kost", "@iurii_serbin", "79103333226", "@Roma_pr", "@ElenaERMACK", "@Alexrut1588", "17044214938", "@canapsis", "79646560911", "@kazamerican", "@sterner2021", "@RudolfPlett", "@Nikolay_Detkovskiy", "@Geosma55", "@DmitriiDubov87", "@sergeytrotskii", "@yuryleon", "@dmitriy_kashintsev", "@Maxabr91", "@kingkrys", "@ZERHIUS", "@Aydar_Ka", "@DrKoledgio", "@holod_new", "@procarbion", "@msyarcev", "17866060066", "@DmitriiUSB", "@Jephrin", "@MdEYE", "@Deonis_14", "@Mistershur", '@MakenzyM', "@OchirMan08", "@MarkAlim8", "@v_zmitrovich", "@amsol111", "@Atomicgo18", "@djek70", "79043434519", "@iii_logrus", "@Groove12", "@sergeewpavel", "@RomaTomilov", "@Markokorp", "t_gora", "@luciusmagnus", "@AlexandrM_1976", "@shstrnn", "@nzdr15", "@DmitriiPetrenko", "@Arsen911", "@Norfolk_san", "@zhaKOSHKA", "79104358892", "@Ikprof", "@ambidekstr10", "393203005915", "@Louren325", "@GorAnt90", "@sunfire_08", "@Sergiy1234567", "@vlastand"]
+def load_allowed_users():
+    try:
+        with open('users.txt', 'r') as file:
+            users = [line.strip() for line in file if line.strip()]
+            return users
+    except FileNotFoundError:
+        print("Файл users.txt не найден. Создайте файл и добавьте пользователей.")
+        return []
+    except Exception as e:
+        print(f"Ошибка при чтении файла users.txt: {e}")
+        return []
+
+
+def read_max_power_spx():
+    try:
+        with open('Max Power SPX.txt', 'r') as file:
+            content = file.read().strip()
+            if content:
+                return float(content)
+    except (FileNotFoundError, ValueError):
+        pass
+    return None
+
+
+def load_expirations_from_file(ticker):
+    file_map = {
+        "^SPX": "spx_oi_data.txt",
+        "SPY": "spy_oi_data.txt",
+        "QQQ": "qqq_oi_data.txt",
+        "^NDX": "ndx_oi_data.txt",
+        "NVDA": "nvda_oi_data.txt",
+        "VIX": "nvda_oi_data.txt"
+    }
+
+    file_name = file_map.get(ticker)
+    if not file_name:
+        return None
+
+    try:
+        if os.path.exists(file_name):
+            with open(file_name, 'r', encoding='utf-8') as file:
+                lines = file.readlines()
+                if not lines:
+                    return None
+
+                # Парсим даты из файла
+                file_dates = set()
+                for line in lines:
+                    if line.strip():
+                        parts = line.strip().split('\t')
+                        if parts:  # Первая часть - дата
+                            date_str = parts[0]
+                            try:
+                                dt = datetime.strptime(date_str, '%a %b %d %Y')
+                                file_dates.add(dt.strftime('%Y-%m-%d'))
+                            except:
+                                continue
+                return sorted(file_dates) if file_dates else None
+    except Exception as e:
+        print(f"Ошибка при чтении файла {file_name}: {e}")
+    return None
+
+
+def get_yfinance_expirations(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        return stock.options
+    except Exception as e:
+        print(f"Ошибка загрузки данных {ticker} из yfinance: {e}")
+        return []
+
+
+# Функция для загрузки данных SPX OI из файла
+def load_spx_oi_data():
+    try:
+        file_path = 'spx_oi_data.txt'
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.readlines()
+        print(f"Файл {file_path} не найден")
+    except Exception as e:
+        print(f"Ошибка при чтении файла spx_oi_data.txt: {e}")
+    return None
+
+
+# Функция для загрузки данных SPY OI из файла
+def load_spy_oi_data():
+    try:
+        file_path = 'spy_oi_data.txt'
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.readlines()
+        print(f"Файл {file_path} не найден")
+    except Exception as e:
+        print(f"Ошибка при чтении файла spy_oi_data.txt: {e}")
+    return None
+
+
+# Функция для загрузки данных QQQ OI из файла
+def load_qqq_oi_data():
+    try:
+        file_path = 'qqq_oi_data.txt'
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.readlines()
+        print(f"Файл {file_path} не найден")
+    except Exception as e:
+        print(f"Ошибка при чтении файла qqq_oi_data.txt: {e}")
+    return None
+
+
+# Функция для загрузки данных NDX OI из файла
+def load_ndx_oi_data():
+    try:
+        file_path = 'ndx_oi_data.txt'
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.readlines()
+        print(f"Файл {file_path} не найден")
+    except Exception as e:
+        print(f"Ошибка при чтении файла ndx_oi_data.txt: {e}")
+    return None
+
+
+# Функция для загрузки данных NDX OI из файла
+def load_vix_oi_data():
+    try:
+        file_path = 'vix_oi_data.txt'
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.readlines()
+        print(f"Файл {file_path} не найден")
+    except Exception as e:
+        print(f"Ошибка при чтении файла vix_oi_data.txt: {e}")
+    return None
+
+
+# Функция для загрузки данных NVDA OI из файла
+def load_nvda_oi_data():
+    try:
+        file_path = 'nvda_oi_data.txt'
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.readlines()
+        print(f"Файл {file_path} не найден")
+    except Exception as e:
+        print(f"Ошибка при чтении файла nvda_oi_data.txt: {e}")
+    return None
+
+
+def convert_expiration_date(expiration_date):
+    """Конвертирует дату экспирации из формата 'YYYY-MM-DD' в 'Day Month DD YYYY'"""
+    try:
+        dt = datetime.strptime(expiration_date, '%Y-%m-%d')
+        return dt.strftime('%a %b %d %Y')
+    except:
+        return None
 
 
 # Функция для преобразования тикеров
 def normalize_ticker(ticker):
     index_map = {
         "SPX": "^SPX", "NDX": "^NDX", "RUT": "^RUT", "DIA": "^DIA",
-        "SPY": "SPY", "QQQ": "QQQ", "DIA": "DIA", "XSP": "XSP", "IWM": "IWM", "VIX": "^VIX"
+        "SPY": "SPY", "QQQ": "QQQ", "DIA": "DIA", "XSP": "^XSP", "IWM": "IWM", "VIX": "^VIX"
     }
     return index_map.get(ticker.upper(), ticker.upper())
 
 
 # Функция получения данных по опционам с кэшированием
 @cache.memoize(timeout=60)
+def get_yfinance_options(ticker, expiration):
+    """Кешированная функция для получения данных опционов из yfinance"""
+    try:
+        stock = yf.Ticker(ticker)
+        option_chain = stock.option_chain(expiration)
+        calls = option_chain.calls[['strike', 'openInterest', 'volume']].rename(
+            columns={'openInterest': 'Call OI', 'volume': 'Call Volume'})
+        puts = option_chain.puts[['strike', 'openInterest', 'volume']].rename(
+            columns={'openInterest': 'Put OI', 'volume': 'Put Volume'})
+        return calls.merge(puts, on='strike', how='outer').sort_values(by='strike')
+    except Exception as e:
+        print(f"Ошибка загрузки данных из yfinance для {expiration}: {e}")
+        return None
+
+
+@cache.memoize(timeout=60)
+def get_yfinance_spot_price(ticker):
+    """Кешированная функция для получения текущей цены из yfinance"""
+    try:
+        stock = yf.Ticker(ticker)
+        if ticker == "^SPX":
+            xsp_ticker = yf.Ticker("^XSP")
+            if xsp_ticker.history(period="1d").shape[0] > 0:
+                xsp_price = xsp_ticker.history(period="1d")['Close'].iloc[-1]
+                return xsp_price * 10  # Умножаем цену XSP на 10
+
+            # Стандартная логика для других тикеров
+        stock = yf.Ticker(ticker)
+        if stock.history(period="1d").shape[0] > 0:
+            return stock.history(period="1d")['Close'].iloc[-1]
+    except Exception as e:
+        print(f"Ошибка загрузки текущей цены для {ticker}: {e}")
+    return None
+
+
 def get_option_data(ticker, expirations):
     ticker = normalize_ticker(ticker)
+
     try:
         stock = yf.Ticker(ticker)
         available_dates = stock.options
@@ -52,18 +246,106 @@ def get_option_data(ticker, expirations):
 
     all_options_data = []
 
-    for expiration in expirations:
-        try:
-            option_chain = stock.option_chain(expiration)
-            calls = option_chain.calls[['strike', 'openInterest', 'volume']].rename(
-                columns={'openInterest': 'Call OI', 'volume': 'Call Volume'})
-            puts = option_chain.puts[['strike', 'openInterest', 'volume']].rename(
-                columns={'openInterest': 'Put OI', 'volume': 'Put Volume'})
+    # Загрузка ручных данных для соответствующих тикеров
+    manual_data_dict = {}
+    if ticker == "^SPX":
+        manual_data = load_spx_oi_data()
+    elif ticker == "SPY":
+        manual_data = load_spy_oi_data()
+    elif ticker == "QQQ":
+        manual_data = load_qqq_oi_data()
+    elif ticker == "^NDX":
+        manual_data = load_ndx_oi_data()
+    elif ticker == "^VIX":
+        manual_data = load_vix_oi_data()
+    elif ticker == "NVDA":
+        manual_data = load_nvda_oi_data()
+    else:
+        manual_data = None
 
-            options_data = calls.merge(puts, on='strike', how='outer').sort_values(by='strike')
-            all_options_data.append(options_data)
-        except Exception as e:
-            print(f"Ошибка загрузки данных для {expiration}: {e}")
+    if manual_data:
+        def parse_date(date_str):
+            try:
+                return datetime.strptime(date_str, '%a %b %d %Y').strftime('%Y-%m-%d')
+            except:
+                return None
+
+        # Helper function to safely convert to int
+        def safe_int(value):
+            try:
+                return int(value.replace(',', '')) if value.strip() else 0
+            except:
+                return 0
+
+        # Парсим данные из файла
+        for line in manual_data:
+            if line.strip():
+                parts = line.strip().split('\t')
+                if len(parts) >= 6:  # Новый формат с volume
+                    date_str = parts[0]
+                    call_oi = parts[1]
+                    strike = parts[2]
+                    put_oi = parts[3]
+                    call_volume = parts[4]
+                    put_volume = parts[5]
+
+                    parsed_date = parse_date(date_str)
+                    if parsed_date:
+                        if parsed_date not in manual_data_dict:
+                            manual_data_dict[parsed_date] = []
+                        manual_data_dict[parsed_date].append({
+                            'Call OI': safe_int(call_oi),
+                            'strike': float(strike),
+                            'Put OI': safe_int(put_oi),
+                            'Call Volume': safe_int(call_volume),
+                            'Put Volume': safe_int(put_volume)
+                        })
+                elif len(parts) >= 4:  # Старый формат без volume
+                    date_str = parts[0]
+                    call_oi = parts[1]
+                    strike = parts[2]
+                    put_oi = parts[3]
+
+                    parsed_date = parse_date(date_str)
+                    if parsed_date:
+                        if parsed_date not in manual_data_dict:
+                            manual_data_dict[parsed_date] = []
+                        manual_data_dict[parsed_date].append({
+                            'Call OI': safe_int(call_oi),
+                            'strike': float(strike),
+                            'Put OI': safe_int(put_oi),
+                            'Call Volume': 0,  # По умолчанию 0
+                            'Put Volume': 0  # По умолчанию 0
+                        })
+
+    # Обрабатываем запрошенные даты экспирации
+    for expiration in expirations:
+        if expiration in manual_data_dict:
+            print(f"Используем ручные данные для {expiration} (тикер: {ticker})")
+            df = pd.DataFrame(manual_data_dict[expiration])
+
+            # Если volume не было в файле (все нули), пробуем загрузить из yfinance
+            if df['Call Volume'].sum() == 0 and df['Put Volume'].sum() == 0:
+                try:
+                    # Используем кешированную функцию для получения volume
+                    volume_data = get_yfinance_options(ticker, expiration)
+                    if volume_data is not None:
+                        volume_data = volume_data[['strike', 'Call Volume', 'Put Volume']]
+                        df = df.merge(volume_data, on='strike', how='left')
+                        df['Call Volume'] = df['Call Volume_y'].fillna(0)
+                        df['Put Volume'] = df['Put Volume_y'].fillna(0)
+                        df.drop(['Call Volume_x', 'Put Volume_x', 'Call Volume_y', 'Put Volume_y'],
+                                axis=1, inplace=True, errors='ignore')
+                except Exception as e:
+                    print(f"Ошибка загрузки volume из yfinance: {e}")
+
+            all_options_data.append(df)
+        else:
+            # Полная загрузка из yfinance с использованием кеширования
+            print(f"Загружаем данные для {expiration} из yfinance (тикер: {ticker})")
+            options_data = get_yfinance_options(ticker, expiration)
+            if options_data is not None:
+                all_options_data.append(options_data)
 
     if not all_options_data:
         print("Нет данных по опционам")
@@ -71,26 +353,37 @@ def get_option_data(ticker, expirations):
 
     combined_data = pd.concat(all_options_data).groupby("strike", as_index=False).sum()
 
-    if stock.history(period="1d").shape[0] > 0:
-        spot_price = stock.history(period="1d")['Close'].iloc[-1]
-    else:
-        spot_price = None
+    # Получаем текущую цену с использованием кеширования
+    spot_price = get_yfinance_spot_price(ticker)
 
     if spot_price:
-        combined_data['Net GEX'] = (
-                (combined_data['Call OI'] * spot_price / 100 * spot_price * 0.001)
-                - (combined_data['Put OI'] * spot_price / 100 * spot_price * 0.001)
-        ).round(1)
+        # Для SPX используем специальный расчет с ценой XSP*10
+        if ticker == "^SPX":
+            combined_data['Net GEX'] = (
+                (combined_data['Call OI'] * spot_price / 100 * spot_price * 0.001) -
+                (combined_data['Put OI'] * spot_price / 100 * spot_price * 0.001)
+            ).round(1)
 
-    combined_data['AG'] = ((combined_data['Call OI'] * spot_price / 100 * spot_price * 0.005) +
-                           (combined_data['Put OI'] * spot_price / 100 * spot_price * 0.005)).round(1)
+            combined_data['AG'] = (
+                (combined_data['Call OI'] * spot_price / 100 * spot_price * 0.005) * 8 +
+                (combined_data['Put OI'] * spot_price / 100 * spot_price * 0.005) * 8
+            ).round(1)
+        else:
+            # Стандартный расчет для других тикеров
+            combined_data['Net GEX'] = (
+                (combined_data['Call OI'] * spot_price / 100 * spot_price * 0.001) -
+                (combined_data['Put OI'] * spot_price / 100 * spot_price * 0.001)
+            ).round(1)
 
-    max_ag_strike = combined_data.loc[combined_data['AG'].idxmax(), 'strike']
+            combined_data['AG'] = (
+                (combined_data['Call OI'] * spot_price / 100 * spot_price * 0.005) * 8 +
+                (combined_data['Put OI'] * spot_price / 100 * spot_price * 0.005) * 8
+            ).round(1)
 
-    return combined_data, available_dates, spot_price, max_ag_strike
+    return combined_data, available_dates, spot_price, stock
 
 
-# Функция для расчета статических уровней
+# Функция для расчета статических уровней (без изменений)
 def calculate_static_levels(options_data, spot_price):
     # Уровни сопротивления
     resistance_levels = []
@@ -138,7 +431,7 @@ def calculate_static_levels(options_data, spot_price):
     return resistance_levels, support_levels
 
 
-# Функция для добавления статических уровней на график
+# Функция для добавления статических уровней на график (без изменений)
 def add_static_levels_to_chart(fig, resistance_levels, support_levels, market_open_time, market_close_time):
     # Параметры зон
     resistance_zone_lower_percent = -0.00045
@@ -185,6 +478,66 @@ def add_static_levels_to_chart(fig, resistance_levels, support_levels, market_op
         ))
 
     return fig
+
+
+oi_volume_page = html.Div([
+    html.H1("Open Interest / Volume", style={'textAlign': 'center'}),
+
+    html.Div([
+        html.Label(""),
+        dcc.Input(id='ticker-input-oi-volume', type='text', value='SPX', className='dash-input'),
+        html.Button('Search', id='search-button-oi-volume', n_clicks=0, className='dash-button', style={'margin-left': '10px'}),
+    ], className='dash-container', style={'display': 'flex', 'align-items': 'center'}),
+
+    html.Div([
+        html.Label("Expiration:"),
+        dcc.Dropdown(id='date-dropdown-oi-volume', multi=True, className='dash-dropdown'),
+    ], className='dash-container'),
+
+    html.Div([
+        html.Label("Parameters:"),
+        html.Div([
+            html.Button("Volume spread", id="btn-volume-spread", className="parameter-button active"),
+            html.Button("Call OI", id="btn-call-oi-oi-volume", className="parameter-button"),
+            html.Button("Put OI", id="btn-put-oi-oi-volume", className="parameter-button"),
+            html.Button("Call Volume", id="btn-call-vol-oi-volume", className="parameter-button"),
+            html.Button("Put Volume", id="btn-put-vol-oi-volume", className="parameter-button"),
+        ], className="button-container", style={'display': 'flex', 'flex-wrap': 'wrap', 'gap': '10px'}),
+    ], className='dash-container'),
+
+    dcc.Store(id='selected-params-oi-volume', data=['Volume Spread']),
+    dcc.Store(id='options-data-store-oi-volume'),
+
+    dcc.Graph(
+        id='oi-volume-chart',
+        style={'height': '900px', 'border-radius': '12px',
+               'box-shadow': '0 4px 10px rgba(0, 0, 0, 0.3)',
+               'overflow': 'hidden',
+               'background-color': '#1e1e1e',
+               'padding': '10px',
+               'margin-bottom': '20px'},
+        config={
+            'displayModeBar': False,
+            'scrollZoom': False,
+            'dragmode': False
+        }
+    ),
+
+    dcc.Graph(
+        id='oi-volume-price-chart',
+        style={'height': '950px', 'border-radius': '12px',
+               'box-shadow': '0 4px 10px rgba(0, 0, 0, 0.3)',
+               'overflow': 'hidden',
+               'background-color': '#1e1e1e',
+               'padding': '10px',
+               'margin-bottom': '20px'},
+        config={
+            'displayModeBar': False,
+            'scrollZoom': False,
+            'dragmode': False
+        }
+    )
+])
 
 # Лейаут для страницы "Options Summary"
 options_summary_page = html.Div(
@@ -268,109 +621,186 @@ options_summary_page = html.Div(
 how_to_use_gex_page = html.Div(
     className='how-to-use-gex-page',
     children=[
-        html.H1("Как использовать GEX", style={'textAlign': 'center', 'color': 'white'}),
+        html.H1("How To Use GEX", style={'textAlign': 'center', 'color': 'white'}),
 
-        # Видео раздел
+        # Video links section with buttons
         html.Div([
-            html.H2("", style={'color': '#00ffcc', 'textAlign': 'center', 'margin-bottom': '30px'}),
+            html.H2("Video Tutorials", style={'color': '#00ffcc', 'textAlign': 'center', 'margin-bottom': '30px'}),
 
-            # Первое видео
+            # Button container
             html.Div([
-                dcc.Markdown(
-                    """
-                    <div style="width:100%; height:500px; margin-bottom:10px; border-radius:10px; overflow:hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3)">
-                        <iframe 
-                            src="https://www.youtube.com/embed/leCrLFoL51Y" 
-                            width="100%" 
-                            height="100%" 
-                            frameborder="0" 
-                            style="border:none;"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            allowfullscreen>
-                        </iframe>
-                    </div>
-                    """,
-                    dangerously_allow_html=True
+                # Long/Short Signals button
+                html.A(
+                    html.Div([
+                        html.Img(
+                            src="https://i.postimg.cc/FFw0nQVC/c710e3f4fb226fa0e20d67de72a9a55f.png",
+                            style={
+                                'height': '20px',
+                                'margin-right': '10px',
+                                'vertical-align': 'middle'
+                            }
+                        ),
+                        html.Span("Long/Short Signals")
+                    ],
+                        style={
+                            'display': 'flex',
+                            'align-items': 'center',
+                            'justify-content': 'center'
+                        }),
+                    href="https://youtu.be/WsKWDGZDT3Q",
+                    target="_blank",
+                    style={
+                        'display': 'block',
+                        'color': '#0088cc',
+                        'text-decoration': 'none',
+                        'font-weight': 'bold',
+                        'font-size': '14px',
+                        'background-color': 'rgba(0,136,204,0.1)',
+                        'padding': '12px',
+                        'border-radius': '8px',
+                        'border': '1px solid rgba(0,136,204,0.3)',
+                        'text-transform': 'uppercase',
+                        'letter-spacing': '1px',
+                        'transition': 'all 0.3s ease',
+                        'margin': '10px 0',
+                        'cursor': 'pointer'
+                    }
                 ),
-                html.P("Сигнал на Long/Short",
-                       style={'textAlign': 'center', 'color': 'white', 'font-size': '18px'})
-            ], style={'margin-bottom': '40px', 'background-color': '#252525', 'padding': '20px',
-                      'border-radius': '10px'}),
-            # Первое видео
-            html.Div([
-                dcc.Markdown(
-                    """
-                    <div style="width:100%; height:500px; margin-bottom:10px; border-radius:10px; overflow:hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3)">
-                        <iframe 
-                            src="https://www.youtube.com/embed/bgunK-z1gD0" 
-                            width="100%" 
-                            height="100%" 
-                            frameborder="0" 
-                            style="border:none;"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            allowfullscreen>
-                        </iframe>
-                    </div>
-                    """,
-                    dangerously_allow_html=True
-                ),
-                html.P("Сигнал на пробой уровня",
-                       style={'textAlign': 'center', 'color': 'white', 'font-size': '18px'})
-            ], style={'margin-bottom': '40px', 'background-color': '#252525', 'padding': '20px',
-                      'border-radius': '10px'}),
-            # Первое видео
-            html.Div([
-                dcc.Markdown(
-                    """
-                    <div style="width:100%; height:500px; margin-bottom:10px; border-radius:10px; overflow:hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3)">
-                        <iframe 
-                            src="https://www.youtube.com/embed/leCrLFoL51Y" 
-                            width="100%" 
-                            height="100%" 
-                            frameborder="0" 
-                            style="border:none;"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            allowfullscreen>
-                        </iframe>
-                    </div>
-                    """,
-                    dangerously_allow_html=True
-                ),
-                html.P("Understanding Gamma Exposure Basics",
-                       style={'textAlign': 'center', 'color': 'white', 'font-size': '18px'})
-            ], style={'margin-bottom': '40px', 'background-color': '#252525', 'padding': '20px',
-                      'border-radius': '10px'}),
 
-            # Второе видео
-            html.Div([
-                dcc.Markdown(
-                    """
-                    <div style="width:100%; height:500px; margin-bottom:10px; border-radius:10px; overflow:hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3)">
-                        <iframe 
-                            src="https://www.youtube.com/embed/bgunK-z1gD0" 
-                            width="100%" 
-                            height="100%" 
-                            frameborder="0" 
-                            style="border:none;"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            allowfullscreen>
-                        </iframe>
-                    </div>
-                    """,
-                    dangerously_allow_html=True
+                # Breakout Signals button
+                html.A(
+                    html.Div([
+                        html.Img(
+                            src="https://i.postimg.cc/FFw0nQVC/c710e3f4fb226fa0e20d67de72a9a55f.png",
+                            style={
+                                'height': '20px',
+                                'margin-right': '10px',
+                                'vertical-align': 'middle'
+                            }
+                        ),
+                        html.Span("Breakout Signals")
+                    ],
+                        style={
+                            'display': 'flex',
+                            'align-items': 'center',
+                            'justify-content': 'center'
+                        }),
+                    href="https://youtu.be/GNpU7PbjE1A",
+                    target="_blank",
+                    style={
+                        'display': 'block',
+                        'color': '#0088cc',
+                        'text-decoration': 'none',
+                        'font-weight': 'bold',
+                        'font-size': '14px',
+                        'background-color': 'rgba(0,136,204,0.1)',
+                        'padding': '12px',
+                        'border-radius': '8px',
+                        'border': '1px solid rgba(0,136,204,0.3)',
+                        'text-transform': 'uppercase',
+                        'letter-spacing': '1px',
+                        'transition': 'all 0.3s ease',
+                        'margin': '10px 0',
+                        'cursor': 'pointer'
+                    }
                 ),
-                html.P("Advanced GEX Trading Strategies",
-                       style={'textAlign': 'center', 'color': 'white', 'font-size': '18px'})
-            ], style={'margin-bottom': '40px', 'background-color': '#252525', 'padding': '20px',
-                      'border-radius': '10px'})
-        ], style={'max-width': '900px', 'margin': '0 auto', 'margin-bottom': '50px'}),
+
+                # Support/Resistance Levels button
+                html.A(
+                    html.Div([
+                        html.Img(
+                            src="https://i.postimg.cc/FFw0nQVC/c710e3f4fb226fa0e20d67de72a9a55f.png",
+                            style={
+                                'height': '20px',
+                                'margin-right': '10px',
+                                'vertical-align': 'middle'
+                            }
+                        ),
+                        html.Span("Support/Resistance Levels")
+                    ],
+                        style={
+                            'display': 'flex',
+                            'align-items': 'center',
+                            'justify-content': 'center'
+                        }),
+                    href="https://youtu.be/uThgJ_QMiNU",
+                    target="_blank",
+                    style={
+                        'display': 'block',
+                        'color': '#0088cc',
+                        'text-decoration': 'none',
+                        'font-weight': 'bold',
+                        'font-size': '14px',
+                        'background-color': 'rgba(0,136,204,0.1)',
+                        'padding': '12px',
+                        'border-radius': '8px',
+                        'border': '1px solid rgba(0,136,204,0.3)',
+                        'text-transform': 'uppercase',
+                        'letter-spacing': '1px',
+                        'transition': 'all 0.3s ease',
+                        'margin': '10px 0',
+                        'cursor': 'pointer'
+                    }
+                ),
+
+                # Iron Condor Timing button
+                html.A(
+                    html.Div([
+                        html.Img(
+                            src="https://i.postimg.cc/FFw0nQVC/c710e3f4fb226fa0e20d67de72a9a55f.png",
+                            style={
+                                'height': '20px',
+                                'margin-right': '10px',
+                                'vertical-align': 'middle'
+                            }
+                        ),
+                        html.Span("neutral strategies")
+                    ],
+                        style={
+                            'display': 'flex',
+                            'align-items': 'center',
+                            'justify-content': 'center'
+                        }),
+                    href="https://youtu.be/lmvKwZ6NlmE",
+                    target="_blank",
+                    style={
+                        'display': 'block',
+                        'color': '#0088cc',
+                        'text-decoration': 'none',
+                        'font-weight': 'bold',
+                        'font-size': '14px',
+                        'background-color': 'rgba(0,136,204,0.1)',
+                        'padding': '12px',
+                        'border-radius': '8px',
+                        'border': '1px solid rgba(0,136,204,0.3)',
+                        'text-transform': 'uppercase',
+                        'letter-spacing': '1px',
+                        'transition': 'all 0.3s ease',
+                        'margin': '10px 0',
+                        'cursor': 'pointer'
+                    }
+                )
+            ], style={
+                'max-width': '400px',
+                'margin': '0 auto',
+                'padding': '40px',
+                'background-color': 'rgba(30,30,30,0.8)',
+                'border-radius': '12px',
+                'box-shadow': '0 8px 30px rgba(0,0,0,0.5)',
+                'backdrop-filter': 'blur(10px)',
+                'border': '1px solid rgba(255,255,255,0.1)',
+                'display': 'flex',
+                'flex-direction': 'column',
+                'align-items': 'center'
+            })
+        ], style={'margin-bottom': '50px'}),
 
         html.Div([
             html.H2("Gamma Exposure (GEX)", style={'color': '#00ffcc'}),
             html.P(
-                "Gamma Exposure (GEX) измеряет, насколько маркет-мейкерам необходимо хеджировать свои позиции по опционам. Положительный GEX означает, что маркет-мейкеры придерживаются длинных позиций по гамме и стремятся стабилизировать рынок, покупая на падениях и продавая на подъеме. Отрицательный GEX означает, что у них короткая гамма и они могут усугубить движение рынка."),
+                "Gamma Exposure (GEX) measures how much market makers need to hedge their options positions. Positive GEX means market makers are long gamma and act as market stabilizers (buying dips and selling rallies). Negative GEX means they're short gamma and may amplify market moves."),
 
-            html.H3("Ключевые понятия:", style={'color': '#00ffcc'}),
+            html.H3("Key Concepts:", style={'color': '#00ffcc'}),
             html.Ul([
                 html.Li(html.Strong("Positive GEX:"), " Market makers are stabilizing forces (buy low, sell high)"),
                 html.Li(html.Strong("Negative GEX:"), " Market makers amplify moves (buy high, sell low)"),
@@ -380,73 +810,73 @@ how_to_use_gex_page = html.Div(
                 html.Li(html.Strong("AG (Absolute Gamma):"), " Total gamma regardless of direction (shows key levels)")
             ], style={'color': 'white'}),
 
-            html.H2("Базовые рекомендации", style={'color': '#00ffcc'}),
+            html.H2("Basic Guidelines", style={'color': '#00ffcc'}),
 
             html.H3("1. Positive GEX", style={'color': '#ab47bc'}),
-            html.P("Когда GEX сильно позитивен:"),
+            html.P("When GEX is strongly positive:"),
             html.Ul([
-                html.Li("Ожидается выкуп просадок и продажи у сопротивлений"),
-                html.Li("Ищите поддержку на AG, High Put Volume, High Put OI strikes"),
+                html.Li("Expect dip buying and selling at resistance levels"),
+                html.Li("Look for support at AG, High Put Volume, High Put OI strikes"),
                 html.Li(
-                    "Сопртивлением часто выступает Max Positive GEX, High Call Volume strikes, High Call OI strikes"),
-                html.Li("VWAP имеет тенденцию выступать в качестве сильной поддержки / сопротивления")
+                    "Resistance often forms at Max Positive GEX, High Call Volume strikes, High Call OI strikes"),
+                html.Li("VWAP tends to act as strong support/resistance")
             ], style={'color': 'white'}),
 
             html.H3("2. Negative GEX", style={'color': '#ab47bc'}),
-            html.P("Когда GEX сильно негативен:"),
+            html.P("When GEX is strongly negative:"),
             html.Ul([
-                html.Li("Ожидайте движений, следующих за трендом (momentum)"),
-                html.Li("Прорывы вниз, скорее всего, продолжатся"),
-                html.Li("Следите за усиливающимися действиями дилеров по хеджированию"),
-                html.Li("Следите за VIX. Уход выше 30 может свидетельствовать о панике")
+                html.Li("Expect trend-following momentum moves"),
+                html.Li("Breakdowns are more likely to continue"),
+                html.Li("Watch for accelerating dealer hedging activity"),
+                html.Li("Monitor VIX. A spike above 30 may indicate panic")
             ], style={'color': 'white'}),
 
             html.H3("3. GEX Flip Zones", style={'color': '#ab47bc'}),
-            html.P("Это критические уровни, на которых гамма меняет значения:"),
+            html.P("These are critical levels where gamma flips:"),
             html.Ul([
-                html.Li("Этот уровень всегда является мощной поддержкой / сопротивлением"),
+                html.Li("These levels always act as strong support/resistance"),
                 html.Li(
-                    "Если происходит пробой, то в основном он не будет ложным и движение может ускориться в направлении пробоя"),
+                    "Breakouts through these levels tend to be real and may accelerate in the breakout direction"),
             ], style={'color': 'white'}),
 
-            html.H2("Практические советы по торговле", style={'color': '#00ffcc'}),
+            html.H2("Practical Trading Tips", style={'color': '#00ffcc'}),
             html.Ol([
-                html.Li("Сочетайте GEX с VWAP - лонги от VWAP в позитивной среде GEX имеют высокую вероятность"),
+                html.Li("Combine GEX with VWAP - longs from VWAP in positive GEX environments have high probability"),
                 html.Li(
-                    "Следите за сочетанием уровней - когда несколько индикаторов указывают на один и тот же уровень (GEX + OI + объем + AG), это усиливает его, делая либо магнитом, либо мощной поддержкой / сопротивлением"),
+                    "Watch for confluence - when multiple indicators point to the same level (GEX + OI + volume + AG), it strengthens its role as either a magnet or strong support/resistance"),
                 html.Li(
-                    "При положительном GEX старайтесь продавать на подъеме у сопротивления, покупать на падении у поддержки"),
+                    "In positive GEX, sell rallies at resistance and buy dips at support"),
                 html.Li(
-                    "При отрицательном GEX работайте в направлении нисходящего импульса, но будьте готовы к быстрому выходу"),
-                html.Li("Следите за изменениями GEX в течение дня, особенно вокруг ключевых технических уровней")
+                    "In negative GEX, trade with the downside momentum but be ready to exit quickly"),
+                html.Li("Monitor GEX changes intraday, especially around key technical levels")
             ], style={'color': 'white'}),
 
-            html.H2("Распространенные ошибки", style={'color': '#00ffcc'}),
+            html.H2("Common Mistakes", style={'color': '#00ffcc'}),
             html.Ul([
                 html.Li(
-                    "Торговля против гаммы (например, покупка при отрицательном GEX). Тут, для лонгов, нужно дожидаться окончания снижения и минимум возврат цены выше VWAP. Помните: при отрицательном GEX маркет-мейкеры продают в падающий рынок и если паника усиливается, то даже крепкие поддержки (High Put Vol, High AG и т.д) могут не удержать цену"),
-                html.Li("Игнорирование G-Flip zone, когда она совпадает с техническими уровнями"),
+                    "Fading gamma (e.g., buying during negative GEX). For longs, wait for selling to exhaust and price to reclaim VWAP. Remember: in negative GEX, market makers sell into weakness and even strong supports (High Put Vol, High AG etc.) may fail during panic"),
+                html.Li("Ignoring G-Flip zones when they align with technical levels"),
                 html.Li(
-                    "Игнорирование внешнего фона / фундаментала / ключевых событий (Даже если цена находится в положительном GEX в начале / середине дня, это не означает, что к концу дня не может поступить негативный фундаментальный / новостной триггер)"),
+                    "Ignoring macro/fundamental context (Even if price is in positive GEX early/mid-day, negative fundamental triggers can still emerge)"),
                 html.Li(
-                    "Игнорирование прочего фундаментального / технического анализа. Например, если падение идет несколько дней, а цена находится в глубоких отрицательных значениях GEX - это не повод шортить на всё, т.к. критическая перепроданность RSI или S5FI и т.д. могут остановить от дальнейшего падения")
+                    "Ignoring other technical analysis. For example, after multi-day declines with extreme negative GEX, avoid blind shorting as oversold conditions (RSI, S5FI etc.) may halt further downside")
             ], style={'color': 'white'}),
 
             html.Div([
-                html.H3("Пример простой сделки", style={'color': '#00ffcc'}),
+                html.H3("Example Trade Setup", style={'color': '#00ffcc'}),
                 html.P(
-                    "Сценарий: SPX в сильной положительной среде GEX: Лонг от VWAP, либо от поддержки на уровне max AG:"),
+                    "Scenario: SPX in strong positive GEX environment: Long from VWAP or AG support level:"),
                 html.Ul([
-                    html.Li("Вход: Покупка на уровне VWAP или поддержки AG"),
-                    html.Li("Стоп: Ниже ближайшего кластера Put OI, либо кластера Put Vol"),
-                    html.Li("Цель: Следующий уровень сопротивления"),
+                    html.Li("Entry: Buy at VWAP or AG support level"),
+                    html.Li("Stop: Below nearest Put OI cluster or Put Vol cluster"),
+                    html.Li("Target: Next resistance level"),
                     html.Li(
-                        "Управление: Масштабирование (сокращение) позиции по мере приближения цены к уровню сопротивления")
+                        "Management: Scale out as price approaches resistance")
                 ], style={'color': 'white'})
             ], style={'margin-top': '20px', 'padding': '15px', 'background-color': '#252525', 'border-radius': '10px'}),
 
             html.Div([
-                html.H3("Ключевые показатели, за которыми следует следить", style={'color': '#00ffcc'}),
+                html.H3("Key Metrics to Monitor", style={'color': '#00ffcc'}),
                 html.Table([
                     html.Tr([
                         html.Th("Indicator", style={'text-align': 'left'}),
@@ -455,40 +885,40 @@ how_to_use_gex_page = html.Div(
                     ]),
                     html.Tr([
                         html.Td("Net GEX"),
-                        html.Td("Преобладают положительные значения"),
-                        html.Td("Преобладают отрицательные значения")
+                        html.Td("Predominantly positive values"),
+                        html.Td("Predominantly negative values")
                     ]),
                     html.Tr([
                         html.Td("AG"),
-                        html.Td("Преобладает выше цены"),
-                        html.Td("Преобладает ниже цены")
+                        html.Td("Mostly above price"),
+                        html.Td("Mostly below price")
                     ]),
                     html.Tr([
                         html.Td("P/C Ratio"),
-                        html.Td("Ниже 0.8"),
-                        html.Td("Выше 1.2")
+                        html.Td("Below 0.8"),
+                        html.Td("Above 1.2")
                     ]),
                     html.Tr([
                         html.Td("Call Volume"),
-                        html.Td("Call Vol больше Put Vol"),
-                        html.Td("Call Vol меньше Put Vol")
+                        html.Td("Call Vol > Put Vol"),
+                        html.Td("Call Vol < Put Vol")
                     ]),
                     html.Tr([
                         html.Td("Put Volume"),
-                        html.Td("Put Vol меньше Call Vol"),
-                        html.Td("Put Vol больше Call Vol")
+                        html.Td("Put Vol < Call Vol"),
+                        html.Td("Put Vol > Call Vol")
                     ])
                 ], style={'width': '100%', 'border-collapse': 'collapse', 'margin-top': '15px'})
             ], style={'margin-top': '30px'}),
 
             html.Div([
-                html.H3("Помните:", style={'color': '#00ffcc'}),
-                html.P("GEX - это всего лишь один из инструментов в вашем арсенале. Всегда сочетайте его с:"),
+                html.H3("Remember:", style={'color': '#00ffcc'}),
+                html.P("GEX is just one tool in your arsenal. Always combine it with:"),
                 html.Ul([
-                    html.Li("Анализом динамики цен"),
-                    html.Li("Профилем объемов"),
-                    html.Li("Рыночным контекстом"),
-                    html.Li("Управлением рисками")
+                    html.Li("Price action analysis"),
+                    html.Li("Volume profile"),
+                    html.Li("Market context"),
+                    html.Li("Risk management")
                 ], style={'color': 'white'})
             ], style={'margin-top': '30px', 'padding': '15px', 'background-color': '#252525', 'border-radius': '10px'})
         ], style={
@@ -497,7 +927,7 @@ how_to_use_gex_page = html.Div(
             'padding': '20px',
             'color': 'white',
             'line-height': '1.6'
-        })
+        }),
     ],
     style={
         'margin-left': '10%',
@@ -514,32 +944,30 @@ disclaimer_page = html.Div(
 
         html.Div([
             dcc.Markdown('''
-            #### Информация на Max Power, содержащаяся на этом и/или связанных с ним веб-продуктах, не является индивидуальной рекомендацией, и носит исключительно информационный характер и не должна рассматриваться как предложение, либо рекомендация к инвестированию, покупке, продаже какого-либо актива, торговых операций по финансовым инструментам. 
-            #### Администрация Проекта оставляет за собой право изменять и обновлять содержание материалов информационного ресурса и других документов, не уведомляя об этом пользователей.
+            #### Information on Quant Power, contained on this and/or related web products, does not constitute individual investment advice. It is provided solely for informational purposes and should not be considered as an offer or recommendation to invest, buy, or sell any asset or financial instrument.
+            #### The Project Administration reserves the right to modify and update the content of this information resource and other documents without notifying users.
 
 
-            ### 1. Никаких рекомендаций по инвестированию
-            Контент на этой платформе не предназначен и не является финансовым советом, инвестиционным советом, торговым советом или каким-либо другим советом. Предоставленная информация не должна использоваться в качестве единственной основы для принятия инвестиционных решений.
+            ### 1. No Investment Recommendations
+            Content on this platform is not intended to be and does not constitute financial advice, investment advice, trading advice, or any other advice. The provided information should not be used as the sole basis for making investment decisions.
 
-            ### 2. Информация о рисках
-            Торговля и инвестирование сопряжены со значительным риском потерь и подходят не каждому инвестору. Вам следует тщательно взвесить свои инвестиционные цели, уровень опыта и склонность к риску, прежде чем принимать какие-либо инвестиционные решения.
+            ### 2. Risk Disclosure
+            Trading and investing involve substantial risk of loss and are not suitable for every investor. You should carefully consider your investment objectives, level of experience, and risk appetite before making any investment decisions.
 
-            ### 3. Отсутствие гарантий
-            Мы не гарантируем эффективность или применимость каких-либо стратегий или предоставленной информации. Прошлые результаты не являются показателем будущих результатов.
+            ### 3. No Guarantees
+            We do not guarantee the effectiveness or applicability of any strategies or information provided. Past performance is not indicative of future results.
 
-            ### 4. Сторонний контент
-            Наша платформа содержит ссылки на сторонние веб-сайты или контент. Мы не подтверждаем и не несем ответственности за точность таких материалов третьих лиц. 
+            ### 4. Third-Party Content
+            Our platform may contain links to third-party websites or content. We do not endorse and are not responsible for the accuracy of such third-party materials.
 
-            ### 5. Ограничение ответственности
-            Max Power не несет ответственности за какие-либо прямые, косвенные, опосредованные или случайные убытки, возникающие в результате или в связи с использованием вами этой платформы. 
+            ### 5. Limitation of Liability
+            Quant Power shall not be liable for any direct, indirect, incidental, or consequential damages arising from or related to your use of this platform.
 
-            ### 6. Точность данных
-            Хотя мы стремимся предоставлять точные рыночные данные, мы не можем гарантировать точность информации, полученной из сторонних источников, таких как Yahoo Finance и т.д..
+            ### 6. Data Accuracy
+            While we strive to provide accurate market data, we cannot guarantee the precision of information obtained from third-party sources such as Yahoo Finance, etc.
 
-            ### 7. Только для информационных целей
-            Данная платформа предназначена исключительно для информационных целей и не должна рассматриваться как рекомендация к покупке или продаже какого-либо финансового инструмента. Используя эту платформу, вы подтверждаете, что прочитали, поняли и соглашаетесь соблюдать настоящий отказ от ответственности.
-
-            Используя эту платформу, вы подтверждаете, что прочитали, поняли и соглашаетесь соблюдать настоящий отказ от ответственности.
+            ### 7. For Informational Purposes Only
+            This platform is intended solely for informational purposes and should not be construed as a recommendation to buy or sell any financial instrument. By using this platform, you acknowledge that you have read, understood, and agree to comply with this disclaimer.
             ''',
                          style={
                              'color': 'white',
@@ -562,6 +990,43 @@ disclaimer_page = html.Div(
         'color': 'white'
     }
 )
+# Функция для получения исторических данных для ценовых графиков
+def get_historical_data_for_chart(ticker):
+    """Получает исторические данные с учетом замены SPX на XSP*10"""
+    if ticker == "^SPX":
+        # Для SPX используем данные XSP и умножаем на 10
+        xsp_ticker = yf.Ticker("^XSP")
+        data = xsp_ticker.history(period='1d', interval='1m')
+        if not data.empty:
+            # Умножаем все ценовые колонки на 10
+            for col in ['Open', 'High', 'Low', 'Close']:
+                data[col] = data[col] * 10
+            # Volume оставляем как есть (не умножаем)
+        return data
+    else:
+        # Стандартная логика для других тикеров
+        stock = yf.Ticker(ticker)
+        return stock.history(period='1d', interval='1m')
+
+
+def calculate_vwap(data, ticker):
+    """Рассчитывает VWAP с учетом особенностей тикера"""
+    if ticker == "^SPX":
+        # Для SPX используем оригинальные данные SPX для расчета VWAP
+        spx_ticker = yf.Ticker("^SPX")
+        spx_data = spx_ticker.history(period='1d', interval='1m')
+        if not spx_data.empty:
+            spx_data['CumulativeVolume'] = spx_data['Volume'].cumsum()
+            spx_data['CumulativePV'] = (
+                        spx_data['Volume'] * (spx_data['High'] + spx_data['Low'] + spx_data['Close']) / 3).cumsum()
+            spx_data['VWAP'] = spx_data['CumulativePV'] / spx_data['CumulativeVolume']
+            return spx_data['VWAP']
+
+    # Стандартный расчет VWAP для других тикеров
+    data['CumulativeVolume'] = data['Volume'].cumsum()
+    data['CumulativePV'] = (data['Volume'] * (data['High'] + data['Low'] + data['Close']) / 3).cumsum()
+    data['VWAP'] = data['CumulativePV'] / data['CumulativeVolume']
+    return data['VWAP']
 
 # Лейаут для объединенной страницы
 app.layout = html.Div([
@@ -570,11 +1035,418 @@ app.layout = html.Div([
 
     # Блок для ввода имени пользователя (отображается только до авторизации)
     html.Div(id='login-container', children=[
-        html.Label("Введите ваше имя пользователя Telegram:"),
-        dcc.Input(id='username-input', type='text', placeholder='@username', className='dash-input'),
-        html.Button('Проверить', id='submit-button', n_clicks=0, className='dash-button'),
-        html.Div(id='access-message', style={'margin-top': '10px'})
-    ], className='dash-container'),
+        # Градиентный фон вместо изображения
+        html.Div(style={
+            'position': 'absolute',
+            'top': 0,
+            'left': 0,
+            'width': '100%',
+            'height': '100%',
+            'background': 'linear-gradient(0deg, #223558 0%, #00b5e2 100%)',
+            'opacity': 0.5,
+            'object-fit': 'cover',
+            'z-index': -1
+        }),
+
+        # Главный контейнер
+        html.Div([
+            # Логотип и заголовок
+            html.Div([
+
+                html.H1("QUANT POWER", style={
+                    'color': 'transparent',
+                        'background': 'linear-gradient(90deg, #00ffcc, #008cff)',
+                        '-webkit-background-clip': 'text',
+                        'text-align': 'center',
+                        'margin-bottom': '10px',
+                        'font-weight': 'bold',
+                        'font-size': '2.5rem',
+                        'text-decoration': 'none',
+                        'display': 'block',
+                        'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'
+                }),
+                html.P("Exclusive information for exceptional people", style={
+                    'color': 'rgba(255,255,255,0.8)',
+                    'text-align': 'center',
+                    'margin-bottom': '40px',
+                    'font-size': '18px'
+                })
+            ], style={'text-align': 'center'}),
+
+            # Форма входа
+            html.Div([
+                html.Label("Enter your login:", style={
+                    'color': 'white',
+                    'font-size': '16px',
+                    'margin-bottom': '10px',
+                    'display': 'block'
+                }),
+                dcc.Input(
+                    id='username-input',
+                    type='text',
+                    placeholder='login',
+                    className='dash-input',
+                    style={
+                        'width': '92.5%',
+                        'padding': '15px',
+                        'border-radius': '8px',
+                        'border': 'none',
+                        'background-color': 'rgba(45,45,45,0.8)',
+                        'color': 'white',
+                        'font-size': '16px',
+                        'margin-bottom': '20px',
+                        'box-shadow': '0 4px 15px rgba(0,0,0,0.2)'
+                    }
+                ),
+                html.Button(
+                    'CHECK ACCESS',
+                    id='submit-button',
+                    n_clicks=0,
+                    className='dash-button',
+                    style={
+                        'width': '100%',
+                        'padding': '15px',
+                        'border-radius': '8px',
+                        'background': 'linear-gradient(135deg, #00ffcc 0%, #008cff 100%)',
+                        'color': '#1e1e1e',
+                        'font-weight': 'bold',
+                        'border': 'none',
+                        'cursor': 'pointer',
+                        'font-size': '16px',
+                        'transition': 'all 0.3s ease',
+                        'box-shadow': '0 4px 15px rgba(0,255,204,0.3)',
+                        'margin-bottom': '20px'
+                    }
+                ),
+                html.Div(id='access-message', style={
+                    'margin-top': '15px',
+                    'text-align': 'center',
+                    'font-size': '16px',
+                    'min-height': '24px',
+                    'color': '#00ffcc'
+                }),
+
+                # Кнопка Telegram
+                html.Div(
+                    dcc.Link(
+                        html.Div([
+                            html.Img(
+                                src='https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg',
+                                style={'height': '24px', 'margin-right': '10px'}
+                            ),
+                            "Get access"
+                        ], style={
+                            'display': 'flex',
+                            'align-items': 'center',
+                            'justify-content': 'center'
+                        }),
+                        href="https://t.me/+ccPkiwklte01MDNi",
+                        target="_blank",
+                        style={
+                            'display': 'block',
+                            'color': '#0088cc',
+                            'text-decoration': 'none',
+                            'font-weight': 'bold',
+                            'font-size': '14px',
+                            'background-color': 'rgba(0,136,204,0.1)',
+                            'padding': '12px',
+                            'border-radius': '8px',
+                            'border': '1px solid rgba(0,136,204,0.3)',
+                            'text-transform': 'uppercase',
+                            'letter-spacing': '1px',
+                            'transition': 'all 0.3s ease',
+                            'margin-top': '20px'
+                        },
+                        className='telegram-link'
+                    ),
+                    style={'width': '100%'}
+                )
+            ], style={
+                'max-width': '400px',
+                'margin': '0 auto',
+                'padding': '40px',
+                'background-color': 'rgba(30,30,30,0.8)',
+                'border-radius': '12px',
+                'box-shadow': '0 8px 30px rgba(0,0,0,0.5)',
+                'backdrop-filter': 'blur(10px)',
+                'border': '1px solid rgba(255,255,255,0.1)'
+            }),
+
+            # Преимущества платформы
+            html.Div([
+                html.H2("", style={
+                    'color': '#00ffcc',
+                    'text-align': 'center',
+                    'margin': '40px 0 30px'
+                }),
+                html.Div([
+                    html.Div([
+                        html.Div([
+                            html.Img(
+                                src='https://i.postimg.cc/3JpcHcJC/stock-market.png',
+                                style={'height': '60px', 'margin-bottom': '15px'}
+                            ),
+                            html.H3("Key Levels", style={'color': 'transparent',
+                        'background': 'linear-gradient(90deg, #00ffcc, #008cff)',
+                        '-webkit-background-clip': 'text',
+                        'text-align': 'center',
+                        'margin-bottom': '10px',
+                        'font-weight': 'bold',
+                        'font-size': '1.5rem',
+                        'text-decoration': 'none',
+                        'display': 'block',
+                        'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
+                            html.P("Identification of key support and resistance levels based on GEX profile",
+                                   style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
+                        ], style={
+                            'padding': '20px',
+                            'text-align': 'center'
+                        })
+                    ], style={
+                        'background': 'rgba(45,45,45,0.6)',
+                        'border-radius': '10px',
+                        'border': '1px solid rgba(0,255,204,0.1)', 'box-shadow': '0 4px 15px rgba(0,255,204,0.2)',
+                        'transition': 'all 0.3s ease',
+                        ':hover': {
+                            'transform': 'translateY(-5px)',
+                            'box-shadow': '0 10px 20px rgba(0,255,204,0.1)'
+                        }
+                    }),
+
+                    html.Div([
+                        html.Div([
+                            html.Img(
+                                src='https://i.postimg.cc/j2sNDCYh/pie-chart.png',
+                                style={'height': '60px', 'margin-bottom': '15px'}
+                            ),
+                            html.H3("Gamma Analysis", style={'color': 'transparent',
+                        'background': 'linear-gradient(90deg, #008cff, #00ffcc)',
+                        '-webkit-background-clip': 'text',
+                        'text-align': 'center',
+                        'margin-bottom': '10px',
+                        'font-weight': 'bold',
+                        'font-size': '1.5rem',
+                        'text-decoration': 'none',
+                        'display': 'block',
+                        'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
+                            html.P("Detailed analysis of gamma exposure to understand market makers' actions",
+                                   style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
+                        ], style={
+                            'padding': '20px',
+                            'text-align': 'center'
+                        })
+                    ], style={
+                        'background': 'rgba(45,45,45,0.6)',
+                        'border-radius': '10px',
+                        'border': '1px solid rgba(0,255,204,0.1)','box-shadow': '0 4px 15px rgba(0,255,204,0.2)',
+                        'transition': 'all 0.3s ease'
+                    }),
+
+                    html.Div([
+                        html.Div([
+                            html.Img(
+                                src='https://i.postimg.cc/Xvw5j9BP/1.png',
+                                style={'height': '60px', 'margin-bottom': '15px'}
+                            ),
+                            html.H3("Volume & OI", style={'color': 'transparent',
+                        'background': 'linear-gradient(90deg, #00ffcc, #008cff)',
+                        '-webkit-background-clip': 'text',
+                        'text-align': 'center',
+                        'margin-bottom': '10px',
+                        'font-weight': 'bold',
+                        'font-size': '1.5rem',
+                        'text-decoration': 'none',
+                        'display': 'block',
+                        'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
+                            html.P("Analysis of open interest and volume to identify key levels",
+                                   style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
+                        ], style={
+                            'padding': '20px',
+                            'text-align': 'center'
+                        })
+                    ], style={
+                        'background': 'rgba(45,45,45,0.6)',
+                        'border-radius': '10px',
+                        'border': '1px solid rgba(0,255,204,0.1)', 'box-shadow': '0 4px 15px rgba(0,255,204,0.2)',
+                        'transition': 'all 0.3s ease'
+                    }),
+
+                    html.Div([
+                        html.Div([
+                            html.Img(
+                                src='https://i.postimg.cc/tCNWG3Pm/magnet.png',
+                                style={'height': '60px', 'margin-bottom': '15px'}
+                            ),
+                            html.H3("Quant Power", style={'color': 'transparent',
+                        'background': 'linear-gradient(90deg, #008cff, #00ffcc)',
+                        '-webkit-background-clip': 'text',
+                        'text-align': 'center',
+                        'margin-bottom': '10px',
+                        'font-weight': 'bold',
+                        'font-size': '1.5rem',
+                        'text-decoration': 'none',
+                        'display': 'block',
+                        'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
+                            html.P("Unique development that identifies the magnet level that attracts price",
+                                   style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
+                        ], style={
+                            'padding': '20px',
+                            'text-align': 'center'
+                        })
+                    ], style={
+                        'background': 'rgba(45,45,45,0.6)',
+                        'border-radius': '10px',
+                        'border': '1px solid rgba(0,255,204,0.1)', 'box-shadow': '0 4px 15px rgba(0,255,204,0.2)',
+                        'transition': 'all 0.3s ease'
+                    }),
+                    html.Div([
+                        html.Div([
+                            html.Img(
+                                src='https://i.postimg.cc/3xXCLMrV/classification.png',
+                                style={'height': '60px', 'margin-bottom': '15px'}
+                            ),
+                            html.H3("Power Zone", style={'color': 'transparent',
+                        'background': 'linear-gradient(90deg, #008cff, #00ffcc)',
+                        '-webkit-background-clip': 'text',
+                        'text-align': 'center',
+                        'margin-bottom': '10px',
+                        'font-weight': 'bold',
+                        'font-size': '1.5rem',
+                        'text-decoration': 'none',
+                        'display': 'block',
+                        'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
+                            html.P("Unique development that identifies the range within which price will move",
+                                   style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
+                        ], style={
+                            'padding': '20px',
+                            'text-align': 'center'
+                        })
+                    ], style={
+                        'background': 'rgba(45,45,45,0.6)',
+                        'border-radius': '10px',
+                        'border': '1px solid rgba(0,255,204,0.1)', 'box-shadow': '0 4px 15px rgba(0,255,204,0.2)',
+                        'transition': 'all 0.3s ease'
+                    }), html.Div([
+                        html.Div([
+                            html.Img(
+                                src='https://i.postimg.cc/KcR9Pr4T/cctv-camera.png',
+                                style={'height': '60px', 'margin-bottom': '15px'}
+                            ),
+                            html.H3("Monitoring", style={'color': 'transparent',
+                        'background': 'linear-gradient(90deg, #00ffcc, #008cff)',
+                        '-webkit-background-clip': 'text',
+                        'text-align': 'center',
+                        'margin-bottom': '10px',
+                        'font-weight': 'bold',
+                        'font-size': '1.5rem',
+                        'text-decoration': 'none',
+                        'display': 'block',
+                        'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
+                            html.P("Real-time tracking of changes",
+                                   style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
+                        ], style={
+                            'padding': '20px',
+                            'text-align': 'center'
+                        })
+                    ], style={
+                        'background': 'rgba(45,45,45,0.6)',
+                        'border-radius': '10px',
+                        'border': '1px solid rgba(0,255,204,0.1)', 'box-shadow': '0 4px 15px rgba(0,255,204,0.2)',
+                        'transition': 'all 0.3s ease'
+                    }),
+                    html.Div([
+                        html.Div([
+                            html.Img(
+                                src='https://i.postimg.cc/Px0ppkHX/sand-clock.png',
+                                style={'height': '60px', 'margin-bottom': '15px'}
+                            ),
+                            html.H3("Time is Money", style={'color': 'transparent',
+                        'background': 'linear-gradient(90deg, #008cff, #00ffcc)',
+                        '-webkit-background-clip': 'text',
+                        'text-align': 'center',
+                        'margin-bottom': '10px',
+                        'font-weight': 'bold',
+                        'font-size': '1.5rem',
+                        'text-decoration': 'none',
+                        'display': 'block',
+                        'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
+                            html.P("Everything you need in one place. Spend time trading, not searching for information",
+                                   style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
+                        ], style={
+                            'padding': '20px',
+                            'text-align': 'center'
+                        })
+                    ], style={
+                        'background': 'rgba(45,45,45,0.6)',
+                        'border-radius': '10px',
+                        'border': '1px solid rgba(0,255,204,0.1)', 'box-shadow': '0 4px 15px rgba(0,255,204,0.2)',
+                        'transition': 'all 0.3s ease'
+                    }),
+                    html.Div([
+                        html.Div([
+                            html.Img(
+                                src='https://i.postimg.cc/zGMNKwvj/transparency.png',
+                                style={'height': '60px', 'margin-bottom': '15px'}
+                            ),
+                            html.H3("Simplicity", style={'color': 'transparent',
+                        'background': 'linear-gradient(90deg, #00ffcc, #008cff)',
+                        '-webkit-background-clip': 'text',
+                        'text-align': 'center',
+                        'margin-bottom': '10px',
+                        'font-weight': 'bold',
+                        'font-size': '1.5rem',
+                        'text-decoration': 'none',
+                        'display': 'block',
+                        'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
+                            html.P("Thoughtful visualization allows you to assess the market in moments",
+                                   style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
+                        ], style={
+                            'padding': '20px',
+                            'text-align': 'center'
+                        })
+                    ], style={
+                        'background': 'rgba(45,45,45,0.6)',
+                        'border-radius': '10px',
+                        'border': '1px solid rgba(0,255,204,0.1)', 'box-shadow': '0 4px 15px rgba(0,255,204,0.2)',
+                        'transition': 'all 0.3s ease'
+                    })
+                ], style={
+                    'display': 'grid',
+                    'grid-template-columns': 'repeat(auto-fit, minmax(250px, 1fr))',
+                    'gap': '20px',
+                    'max-width': '1200px',
+                    'margin': '0 auto'
+                })
+            ], style={'margin-top': '60px', 'padding': '0 20px'}),
+
+            # Футер
+            html.Div([
+                html.P("© 2020 Quant Power. All rights reserved.", style={
+                    'color': 'rgba(255,255,255,0.5)',
+                    'text-align': 'center',
+                    'margin-top': '60px',
+                    'font-size': '14px'
+                }),
+                html.P("Disclaimer: Information is provided for educational purposes only.", style={
+                    'color': 'rgba(255,255,255,0.3)',
+                    'text-align': 'center',
+                    'margin-top': '10px',
+                    'font-size': '12px'
+                })
+            ])
+        ], style={
+            'max-width': '1400px',
+            'margin': '0 auto',
+            'padding': '40px 20px',
+            'position': 'relative',
+            'z-index': 1
+        })
+    ], style={
+        'position': 'relative',
+        'min-height': '100vh',
+        'background': 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+        'overflow': 'hidden'
+    }),
 
     # Основной контент (отображается только после авторизации)
     html.Div(id='main-content', style={'display': 'none'}, children=[
@@ -582,12 +1454,15 @@ app.layout = html.Div([
         html.Div([
             html.Div([
                 dcc.Link(
-                    html.H2("Max Power", style={'color': 'white', 'cursor': 'pointer'}),
+                    html.H2("Quant Power", style={'color': 'white', 'cursor': 'pointer'}),
                     href="/",
                     style={'text-decoration': 'none'}
                 ),
                 html.Hr(),
                 html.Ul([
+                    html.Li(dcc.Link("OI Volume", href="/oi-volume",
+                                     style={'color': 'white', 'text-decoration': 'none'})),
+                    html.Li(style={'height': '20px'}),  # Добавляем пустой элемент для отступа
                     html.Li(dcc.Link("Key Levels", href="/key-levels",
                                      style={'color': 'white', 'text-decoration': 'none'})),
                     html.Li(style={'height': '20px'}),  # Добавляем пустой элемент для отступа
@@ -606,36 +1481,41 @@ app.layout = html.Div([
                         html.Li(dcc.Link("Disclaimer", href="/disclaimer",
                                          style={'color': 'gray', 'text-decoration': 'none', 'font-size': '20px'}))
                     ], style={'list-style-type': 'none', 'padding': '0', 'margin-top': '20px'})
-                ], style={'position': 'absolute', 'bottom': '20px', 'width': '80%'})
+                ], style={'position': 'absolute', 'bottom': '30px', 'width': '80%'})
             ], style={'padding': '20px', 'height': '100%', 'position': 'relative'})
-        ], style={'width': '10%', 'height': '98vh', 'background-color': '#191919',
-                  'position': 'fixed', 'left': '0', 'top': '0'}),
+        ], style={'width': '10%', 'height': '100%',
+                  'position': 'fixed', 'left': '0', 'top': '0',
+                'background': '#191919',
+                'box-shadow': '5px 0 15px rgba(0,0,0,0.2)'}),
 
         # Основной контент страницы
         html.Div([
             dcc.Location(id='url', refresh=False),
             html.Div(id='page-content')
-        ], style={'margin-left': '10%', 'padding': '20px'})
+        ], style={'margin-left': '10%', 'padding': '20px',
+                'width': 'calc(100% - 220px)',
+                'min-height': '100vh',
+                'background': '#191919'})
     ])
 ])
 
 # Лейаут для главной страницы
 index_page = html.Div([
-    html.H1("Max Power", style={'textAlign': 'center'}),
+    html.H1("Quant Power", style={'textAlign': 'center'}),
 
     html.Div([
         html.Label(""),
         dcc.Input(id='ticker-input', type='text', value='SPX', className='dash-input'),
-        html.Button('Поиск', id='search-button', n_clicks=0, className='dash-button', style={'margin-left': '10px'}),
+        html.Button('Search', id='search-button', n_clicks=0, className='dash-button', style={'margin-left': '10px'}),
     ], className='dash-container', style={'display': 'flex', 'align-items': 'center'}),
 
     html.Div([
-        html.Label("Выберите даты экспирации:"),
+        html.Label("Expiration:"),
         dcc.Dropdown(id='date-dropdown', multi=True, className='dash-dropdown'),
     ], className='dash-container'),
 
     html.Div([
-        html.Label("Выберите параметры:"),
+        html.Label("Parameters:"),
         html.Div([
             html.Button("Net GEX", id="btn-net-gex", className="parameter-button"),
             html.Button("AG", id="btn-ag", className="parameter-button"),
@@ -643,6 +1523,7 @@ index_page = html.Div([
             html.Button("Put OI", id="btn-put-oi", className="parameter-button"),
             html.Button("Call Volume", id="btn-call-vol", className="parameter-button"),
             html.Button("Put Volume", id="btn-put-vol", className="parameter-button"),
+            html.Button("Power Zone", id="btn-power-zone", className="parameter-button"),  # New button
         ], className="button-container"),
     ], className='dash-container'),
 
@@ -703,7 +1584,8 @@ key_levels_page = html.Div(
         html.Div([
             html.Label("", style={'color': 'white'}),
             dcc.Input(id='ticker-input-key-levels', type='text', value='SPX', className='dash-input'),
-            html.Button('Поиск', id='search-button-key-levels', n_clicks=0, className='dash-button', style={'margin-left': '10px'}),
+            html.Button('Search', id='search-button-key-levels', n_clicks=0, className='dash-button',
+                        style={'margin-left': '10px'}),
         ], className='dash-container', style={'display': 'flex', 'align-items': 'center'}),
 
         html.Div(
@@ -739,6 +1621,7 @@ key_levels_page = html.Div(
 
 
 # Добавляем новый callback для прогноза
+# Добавляем новый callback для прогноза
 @app.callback(
     Output('forecast-text', 'children'),
     [Input('search-button-key-levels', 'n_clicks'),
@@ -761,7 +1644,7 @@ def update_forecast(n_clicks, n_submit, ticker):
     # Получаем данные по ценам
     try:
         hist = stock.history(period='3mo', interval='1d')
-        intraday_hist = stock.history(period='1d', interval='1m')
+        intraday_hist = get_historical_data_for_chart(ticker)
         if hist.empty or intraday_hist.empty:
             return html.Div("Нет данных для анализа", style={'color': 'white'})
 
@@ -899,14 +1782,14 @@ def update_forecast(n_clicks, n_submit, ticker):
     forecast = []
 
     # 1. Основные данные (обновленный заголовок)
-    forecast.append(html.H4(f"📊 Расширенный анализ опционного рынка: {ticker}",
+    forecast.append(html.H4(f"📊 Advanced Options Market Analysis: {ticker}",
                             style={'color': '#00ffcc', 'text-align': 'left', 'margin-bottom': '15px'}))
 
     # Информационная панель
     info_panel = [
         html.Div([
             html.Div([
-                html.P("Текущая цена:", style={'color': 'white'}),
+                html.P("Price:", style={'color': 'white'}),
                 html.P(f"{current_price:.2f}", style={'color': 'white', 'font-weight': 'bold'})
             ], style={'display': 'flex', 'justify-content': 'space-between'}),
 
@@ -950,11 +1833,11 @@ def update_forecast(n_clicks, n_submit, ticker):
     market_context = []
     if bullish_background:
         market_context.append(html.Div([
-            html.H4("📈 СИЛЬНЫЙ БЫЧИЙ ФОН",
+            html.H4("📈 STRONG BULLISH",
                     style={'color': 'lightgreen', 'text-align': 'center', 'margin-bottom': '10px'}),
-            html.P("🔹 Цена окружена положительными значениями GEX", style={'color': 'lightgreen'}),
-            html.P("🔹 Маркет-мейкеры выступают стабилизаторами рынка", style={'color': 'lightgreen'}),
-            html.P("🔹 Коррекции вероятно будут ограниченными", style={'color': 'lightgreen'})
+            html.P("🔹 The price is in positive GEX", style={'color': 'lightgreen'}),
+            html.P("🔹 Market makers act as market stabilizers", style={'color': 'lightgreen'}),
+            html.P("🔹 Corrections are likely to be limited", style={'color': 'lightgreen'})
         ], style={
             'background-color': 'rgba(0, 255, 0, 0.1)',
             'padding': '15px',
@@ -964,11 +1847,11 @@ def update_forecast(n_clicks, n_submit, ticker):
         }))
     elif bearish_background:
         market_context.append(html.Div([
-            html.H4("📉 СИЛЬНЫЙ МЕДВЕЖИЙ ФОН",
+            html.H4("📉 STRONG BEARISH",
                     style={'color': 'salmon', 'text-align': 'center', 'margin-bottom': '10px'}),
-            html.P("🔹 Цена окружена отрицательными значениями GEX", style={'color': 'salmon'}),
-            html.P("🔹 Маркет-мейкеры усиливают волатильность", style={'color': 'salmon'}),
-            html.P("🔹 Вероятны резкие движения и проскальзывания", style={'color': 'salmon'})
+            html.P("🔹 The price is in negative GEX", style={'color': 'salmon'}),
+            html.P("🔹 Market makers increase volatility", style={'color': 'salmon'}),
+            html.P("🔹 Sudden movements are likely", style={'color': 'salmon'})
         ], style={
             'background-color': 'rgba(255, 0, 0, 0.1)',
             'padding': '15px',
@@ -978,11 +1861,11 @@ def update_forecast(n_clicks, n_submit, ticker):
         }))
     else:
         market_context.append(html.Div([
-            html.H4("🔄 НЕЙТРАЛЬНЫЙ/КОНСОЛИДАЦИОННЫЙ СЦЕНАРИЙ",
+            html.H4("🔄 NEUTRAL/CONSOLIDATION SCENARIO",
                     style={'color': 'yellow', 'text-align': 'center', 'margin-bottom': '10px'}),
-            html.P("🔹 GEX не показывает четкого направления", style={'color': 'yellow'}),
-            html.P("🔹 Вероятна торговля в диапазоне", style={'color': 'yellow'}),
-            html.P("🔹 Ищите пробои с подтверждением объема", style={'color': 'yellow'})
+            html.P("🔹 GEX doesn't show a clear direction", style={'color': 'yellow'}),
+            html.P("🔹 Trading in the range is likely", style={'color': 'yellow'}),
+            html.P("🔹 Look for a breakdown with volume confirmation", style={'color': 'yellow'})
         ], style={
             'background-color': 'rgba(255, 255, 0, 0.1)',
             'padding': '15px',
@@ -1002,23 +1885,23 @@ def update_forecast(n_clicks, n_submit, ticker):
 
     # Уровни поддержки
     if max_put_vol_strike < current_price:
-        support_levels.append(('Объем путов', max_put_vol_strike))
+        support_levels.append(('Put Volume', max_put_vol_strike))
     if max_neg_gex_strike < current_price:
-        support_levels.append(('Отриц. GEX', max_neg_gex_strike))
+        support_levels.append(('negative GEX', max_neg_gex_strike))
     if max_ag_strike < current_price:
         support_levels.append(('AG', max_ag_strike))
     if max_put_oi_strike < current_price:
-        support_levels.append(('OI путов', max_put_oi_strike))
+        support_levels.append(('Put OI', max_put_oi_strike))
 
     # Уровни сопротивления
     if max_call_vol_strike > current_price:
-        resistance_levels.append(('Объем коллов', max_call_vol_strike))
+        resistance_levels.append(('Call Volume', max_call_vol_strike))
     if max_pos_gex_strike > current_price:
-        resistance_levels.append(('Поз. GEX', max_pos_gex_strike))
+        resistance_levels.append(('positive GEX', max_pos_gex_strike))
     if max_ag_strike > current_price:
         resistance_levels.append(('AG', max_ag_strike))
     if max_call_oi_strike > current_price:
-        resistance_levels.append(('OI коллов', max_call_oi_strike))
+        resistance_levels.append(('Call OI', max_call_oi_strike))
 
     # G-Flip зона
     if g_flip_zone:
@@ -1044,53 +1927,49 @@ def update_forecast(n_clicks, n_submit, ticker):
         resistance_groups[price].append(level)
 
     # Функция для форматирования уровней
+    # В функции update_forecast замените блок format_level_groups на следующий:
     def format_level_groups(level_groups, level_type):
         formatted = []
         for price in sorted(level_groups.keys(), key=lambda x: abs(current_price - x)):
             levels = level_groups[price]
-            prob, factors = calculate_probability(price, level_type)
+            prob, _ = calculate_probability(price, level_type)
 
             # Определяем цвет в зависимости от типа уровня
             if level_type == "support":
                 color = '#02d432'  # Зеленый для поддержек
-                prob_text = "отскока"
-                level_name = "поддержка"
+                prob_text = "rebound"
+                level_name = "support"
             else:
                 color = '#f32d35'  # Красный для сопротивлений
-                prob_text = "отбоя"
-                level_name = "сопротивление"
+                prob_text = "stand down"
+                level_name = "resistance"
 
             # Собираем названия параметров
             param_names = [level[0] for level in levels]
 
             # Определяем силу уровня
             if prob > 70:
-                strength = "💪 Сильное"
-                strength_desc = "Высокая вероятность"
+                strength = "💪 Strong"
+                strength_desc = "High probability"
             elif prob > 40:
-                strength = "🆗 Среднее"
-                strength_desc = "Умеренная вероятность"
+                strength = "🆗 Average"
+                strength_desc = "Moderate probability"
             else:
-                strength = "⚠️ Слабое"
-                strength_desc = "Низкая вероятность"
+                strength = "⚠️ Weak"
+                strength_desc = "Low probability"
 
-            # Формируем основной текст
+            # Формируем основной текст (убрали факторы)
             main_text = f"{strength} {level_name} на {price:.2f}: {strength_desc} {prob_text} ({prob}%)"
 
-            # Формируем список параметров
-            params_text = "Подтверждается: " + ", ".join(param_names)
-
-            # Формируем факторы
-            factors_text = "📌 Ключевые факторы: " + ", ".join(sorted(list(set([f[0] for f in factors]))))
+            # Формируем список параметров (оставили только подтверждающие параметры)
+            params_text = "Confirmed: " + ", ".join(param_names)
 
             formatted.append(html.Div([
                 html.Div([
                     html.Span(main_text, style={'color': color, 'font-weight': 'bold'}),
                 ], style={'margin-bottom': '5px'}),
 
-                html.Div(params_text, style={'color': 'white', 'margin-left': '20px', 'margin-bottom': '5px'}),
-
-                html.Div(factors_text, style={'color': 'lightblue', 'margin-left': '20px', 'margin-bottom': '15px'})
+                html.Div(params_text, style={'color': 'white', 'margin-left': '20px', 'margin-bottom': '15px'})
             ], style={
                 'background-color': '#252525',
                 'padding': '10px',
@@ -1103,13 +1982,13 @@ def update_forecast(n_clicks, n_submit, ticker):
 
     # Добавляем поддержки
     if support_groups:
-        levels_analysis.append(html.H5("📉 КЛЮЧЕВЫЕ ПОДДЕРЖКИ:",
+        levels_analysis.append(html.H5("📉 KEY SUPPORTS:",
                                        style={'color': 'white', 'margin-top': '20px'}))
         levels_analysis.extend(format_level_groups(support_groups, "support"))
 
     # Добавляем сопротивления
     if resistance_groups:
-        levels_analysis.append(html.H5("📈 КЛЮЧЕВЫЕ СОПРОТИВЛЕНИЯ:",
+        levels_analysis.append(html.H5("📈 KEY RESISTANCES:",
                                        style={'color': 'white', 'margin-top': '20px'}))
         levels_analysis.extend(format_level_groups(resistance_groups, "resistance"))
 
@@ -1117,7 +1996,7 @@ def update_forecast(n_clicks, n_submit, ticker):
 
     # 4. Торговые идеи (обновленная логика)
     trading_ideas = []
-    trading_ideas.append(html.H5("💡 ВАРИАНТЫ:", style={'color': 'white', 'margin-top': '30px'}))
+    trading_ideas.append(html.H5("💡 variants:", style={'color': 'white', 'margin-top': '30px'}))
 
     def generate_trading_idea(price, level_type, prob, confirmations):
         idea = []
@@ -1126,42 +2005,41 @@ def update_forecast(n_clicks, n_submit, ticker):
 
         if prob > 70:  # Сильный уровень - торгуем отскок/отбой
             if level_type == "support":
-                idea.append(html.P(f"{emoji} Длинные позиции на отскоке от поддержки:",
+                idea.append(html.P(f"{emoji} Long positions on the rebound from support:",
                                    style={'color': color, 'font-weight': 'bold'}))
-                idea.append(html.P(f"• Покупайте при отскоке от {price:.2f} с подтверждением",
+                idea.append(html.P(f"• Buy on the rebound from {price:.2f} with confirmation",
                                    style={'color': 'white'}))
             else:
-                idea.append(html.P(f"{emoji} Короткие позиции на отбое от сопротивления:",
+                idea.append(html.P(f"{emoji} Short positions on the rebound from resistance:",
                                    style={'color': color, 'font-weight': 'bold'}))
-                idea.append(html.P(f"• Продавайте при отбое от {price:.2f} с подтверждением",
-                                   style={'color': 'white'}))
+                idea.append(
+                    html.P(f"• sell when you break away from the resistance level {price:.2f} with confirmation",
+                           style={'color': 'white'}))
 
-            idea.append(html.P(f"• Вероятность {'отскока' if level_type == 'support' else 'отбоя'}: {prob}%",
+            idea.append(html.P(f"• Probability of {'rebound' if level_type == 'support' else 'rebound'}: {prob}%",
                                style={'color': color}))
-            idea.append(html.P(f"• Подтверждающие факторы: {', '.join(confirmations)}",
+            idea.append(html.P(f"• Stop loss: {'below' if level_type == 'support' else 'higher'} level",
                                style={'color': 'white'}))
-            idea.append(html.P(f"• Стоп-лосс: {'ниже' if level_type == 'support' else 'выше'} уровня",
-                               style={'color': 'white'}))
-            idea.append(html.P(f"• Цели: ближайшие {'сопротивления' if level_type == 'support' else 'поддержки'}",
+            idea.append(html.P(f"• Targets: the nearest {'resistances' if level_type == 'support' else 'supports'}",
                                style={'color': 'white'}))
         else:  # Слабый уровень - торгуем пробой
             if level_type == "support":
-                idea.append(html.P(f"🔴 Короткие позиции на пробое поддержки:",
+                idea.append(html.P(f"🔴 Short positions at the breakdown of support:",
                                    style={'color': 'salmon', 'font-weight': 'bold'}))
-                idea.append(html.P(f"• Продавайте при пробое {price:.2f} с объемом",
+                idea.append(html.P(f"•Sell at the breakdown {price:.2f} with volumes",
                                    style={'color': 'white'}))
             else:
-                idea.append(html.P(f"🟢 Длинные позиции на пробое сопротивления:",
+                idea.append(html.P(f"🟢 Long positions at the breakdown of resistance:",
                                    style={'color': 'lightgreen', 'font-weight': 'bold'}))
-                idea.append(html.P(f"• Покупайте при пробое {price:.2f} с объемом",
+                idea.append(html.P(f"• Buy at the breakdown {price:.2f} with volumes",
                                    style={'color': 'white'}))
 
-            idea.append(html.P(f"• Вероятность продолжения: {100 - prob}%",
+            idea.append(html.P(f"• The probability of continuation: {100 - prob}%",
                                style={'color': 'lightgreen' if level_type == 'resistance' else 'salmon'}))
-            idea.append(html.P("• Ищите подтверждение на меньших таймфреймах",
+            idea.append(html.P("• Look for confirmation on smaller timeframes",
                                style={'color': 'white'}))
             idea.append(
-                html.P(f"• Цели: следующие уровни {'поддержки' if level_type == 'support' else 'сопротивления'}",
+                html.P(f"•Targets: next {'support levels' if level_type == 'support' else 'resistance levels'}",
                        style={'color': 'white'}))
 
         return html.Div(idea, style={
@@ -1188,12 +2066,12 @@ def update_forecast(n_clicks, n_submit, ticker):
     # Общие рекомендации для нейтрального рынка
     if not bullish_background and not bearish_background:
         trading_ideas.append(html.Div([
-            html.P("🟡 Торговля в диапазоне:", style={'color': 'yellow', 'font-weight': 'bold'}),
-            html.P("• Покупайте у подтвержденных поддержек, продавайте у подтвержденных сопротивлений",
+            html.P("🟡 Range Trading:", style={'color': 'yellow', 'font-weight': 'bold'}),
+            html.P("• Buy near confirmed support levels, sell near confirmed resistance levels",
                    style={'color': 'white'}),
-            html.P("• Используйте лимитные ордера для входа в зонах уровней", style={'color': 'white'}),
-            html.P("• Уменьшите размер позиции на 30-50% из-за неопределенности", style={'color': 'white'}),
-            html.P("• Ищите ложные пробои для лучших входов", style={'color': 'white'})
+            html.P("• Use limit orders to enter near key levels", style={'color': 'white'}),
+            html.P("• Reduce position size by 30-50% due to uncertainty", style={'color': 'white'}),
+            html.P("• Look for false breakouts for better entries", style={'color': 'white'})
         ], style={
             'background-color': 'rgba(255, 255, 0, 0.1)',
             'padding': '15px',
@@ -1205,28 +2083,28 @@ def update_forecast(n_clicks, n_submit, ticker):
 
     # 5. Управление рисками
     risk_management = []
-    risk_management.append(html.H5("⚠️ УПРАВЛЕНИЕ РИСКАМИ:", style={'color': 'white', 'margin-top': '30px'}))
+    risk_management.append(html.H5("⚠️ RISK MANAGEMENT:", style={'color': 'white', 'margin-top': '30px'}))
 
     risk_management.append(html.Div([
-        html.P("🔹 Размер позиции:", style={'color': 'white', 'font-weight': 'bold'}),
-        html.P("• Рискуйте не более 1-2% капитала на сделку", style={'color': 'white'}),
-        html.P("• Уменьшайте размер в условиях высокой волатильности", style={'color': 'white'}),
+        html.P("🔹 Position Sizing:", style={'color': 'white', 'font-weight': 'bold'}),
+        html.P("• Risk no more than 1-2% of capital per trade", style={'color': 'white'}),
+        html.P("• Reduce position size in high volatility conditions", style={'color': 'white'}),
 
-        html.P("🔹 Стоп-лосс:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
-        html.P(f"• Для длинных позиций: ниже ближайшей поддержки ({min(support_groups.keys()):.2f} при наличии)"
-               if support_groups else "• Для длинных позиций: 1-2% ниже точки входа", style={'color': 'white'}),
+        html.P("🔹 Stop Loss:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
+        html.P(f"• For long positions: below nearest support ({min(support_groups.keys()):.2f} if present)"
+               if support_groups else "• For long positions: 1-2% below entry point", style={'color': 'white'}),
         html.P(
-            f"• Для коротких позиций: выше ближайшего сопротивления ({min(resistance_groups.keys()):.2f} при наличии)"
-            if resistance_groups else "• Для коротких позиций: 1-2% выше точки входа", style={'color': 'white'}),
+            f"• For short positions: above nearest resistance ({min(resistance_groups.keys()):.2f} if present)"
+            if resistance_groups else "• For short positions: 1-2% above entry point", style={'color': 'white'}),
 
-        html.P("🔹 Тейк-профит:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
-        html.P("• Фиксируйте часть прибыли у ключевых уровней", style={'color': 'white'}),
-        html.P("• Используйте трейлинг-стоп после достижения первой цели", style={'color': 'white'}),
+        html.P("🔹 Take Profit:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
+        html.P("• Secure partial profits at key levels", style={'color': 'white'}),
+        html.P("• Use trailing stop after reaching first target", style={'color': 'white'}),
 
-        html.P("🔹 Психология:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
-        html.P("• Избегайте сделок под влиянием эмоций", style={'color': 'white'}),
-        html.P("• Придерживайтесь торгового плана", style={'color': 'white'}),
-        html.P("• Анализируйте каждую сделку", style={'color': 'white'})
+        html.P("🔹 Psychology:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
+        html.P("• Avoid emotionally-driven trades", style={'color': 'white'}),
+        html.P("• Stick to your trading plan", style={'color': 'white'}),
+        html.P("• Review every trade", style={'color': 'white'})
     ], style={
         'background-color': '#252525',
         'padding': '15px',
@@ -1238,26 +2116,25 @@ def update_forecast(n_clicks, n_submit, ticker):
 
     # 6. Дополнительные инсайты
     insights = []
-    insights.append(html.H5("🔍 ДОПОЛНИТЕЛЬНЫЕ ИНСАЙТЫ:", style={'color': 'white', 'margin-top': '30px'}))
+    insights.append(html.H5("🔍 ADDITIONAL INSIGHTS:", style={'color': 'white', 'margin-top': '30px'}))
 
-
-    # Анализ RSI
+    # RSI Analysis
     rsi_analysis = ""
     if current_rsi > 70:
-        rsi_analysis = "🔹 RSI указывает на перекупленность - возможна коррекция"
+        rsi_analysis = "🔹 RSI indicates overbought conditions - potential correction"
     elif current_rsi < 30:
-        rsi_analysis = "🔹 RSI указывает на перепроданность - возможен отскок"
+        rsi_analysis = "🔹 RSI indicates oversold conditions - potential bounce"
     else:
-        rsi_analysis = "🔹 RSI в нейтральной зоне - ищите другие подтверждения"
+        rsi_analysis = "🔹 RSI in neutral zone - look for other confirmations"
 
-    # Анализ P/C Ratio
+    # P/C Ratio Analysis
     pc_analysis = ""
     if pc_ratio > 1.3:
-        pc_analysis = "🔹 Высокий P/C Ratio: рынок ожидает снижения"
+        pc_analysis = "🔹 High P/C Ratio: market expects downside"
     elif pc_ratio < 0.7:
-        pc_analysis = "🔹 Низкий P/C Ratio: рынок ожидает роста"
+        pc_analysis = "🔹 Low P/C Ratio: market expects upside"
     else:
-        pc_analysis = "🔹 Нейтральный P/C Ratio: нет четкого сигнала"
+        pc_analysis = "🔹 Neutral P/C Ratio: no clear signal"
 
     insights.append(html.Div([
         html.P(rsi_analysis, style={'color': 'white'}),
@@ -1289,9 +2166,12 @@ def update_forecast(n_clicks, n_submit, ticker):
 )
 def check_username(n_clicks, username, stored_username, auth_status):
     if n_clicks > 0:
-        if username in ALLOWED_USERS:
+        # Загружаем список разрешенных пользователей из файла
+        allowed_users = load_allowed_users()
+
+        if username and username in allowed_users:
             return (
-                "Доступ разрешен.",
+                "Access is opened",
                 {'display': 'block'},
                 {'display': 'none'},
                 username,
@@ -1299,20 +2179,24 @@ def check_username(n_clicks, username, stored_username, auth_status):
             )
         else:
             return (
-                "Доступ запрещен.",
+                "Access is closed",
                 {'display': 'none'},
                 {'display': 'block'},
                 None,
                 False
             )
-    elif stored_username and stored_username in ALLOWED_USERS and auth_status:
-        return (
-            "",
-            {'display': 'block'},
-            {'display': 'none'},
-            stored_username,
-            True
-        )
+    elif stored_username:
+        # Проверяем сохраненного пользователя при загрузке страницы
+        allowed_users = load_allowed_users()
+        if stored_username in allowed_users and auth_status:
+            return (
+                "",
+                {'display': 'block'},
+                {'display': 'none'},
+                stored_username,
+                True
+            )
+
     return (
         "",
         {'display': 'none'},
@@ -1323,26 +2207,49 @@ def check_username(n_clicks, username, stored_username, auth_status):
 
 
 # Callback для обновления списка дат
+# Замените существующий callback на этот:
 @app.callback(
     [Output('date-dropdown', 'options'), Output('date-dropdown', 'value')],
     [Input('search-button', 'n_clicks'),
      Input('ticker-input', 'n_submit')],
     [State('ticker-input', 'value')],
-    prevent_initial_call=False  # Разрешаем первоначальный вызов
+    prevent_initial_call=False
 )
 def update_dates(n_clicks, n_submit, ticker):
     ctx = dash.callback_context
 
-    # Если это первоначальный запуск и нет ввода от пользования
-    if not ctx.triggered or ticker is None:
-        ticker = 'SPX'  # Устанавливаем SPX по умолчанию
+    if not ctx.triggered:
+        ticker = 'SPX'
+    elif not ticker:
+        ticker = 'SPX'
 
     ticker = normalize_ticker(ticker)
-    _, available_dates, _, _ = get_option_data(ticker, [])
+
+    # Получаем даты из файла
+    file_dates = load_expirations_from_file(ticker)
+
+    # Получаем даты из yfinance
+    yfinance_dates = get_yfinance_expirations(ticker)
+
+    # Объединяем даты, сохраняя порядок и уникальность
+    if file_dates:
+        # Если есть даты из файла, добавляем только те даты из yfinance, которые новее последней даты из файла
+        last_file_date = datetime.strptime(file_dates[-1], '%Y-%m-%d')
+        additional_dates = [
+            date for date in yfinance_dates
+            if datetime.strptime(date, '%Y-%m-%d') > last_file_date
+        ]
+        available_dates = file_dates + additional_dates
+    else:
+        # Если файла нет или он пуст, используем только даты из yfinance
+        available_dates = yfinance_dates
+
     if not available_dates:
+        print(f"Нет доступных дат экспирации для {ticker}")
         return [], []
+
     options = [{'label': date, 'value': date} for date in available_dates]
-    return options, [available_dates[0]]
+    return options, [available_dates[0]] if available_dates else []  # По умолчанию выбираем ближайшую дату
 
 
 # Callback для обновления нажатых кнопок
@@ -1353,19 +2260,25 @@ def update_dates(n_clicks, n_submit, ticker):
      Output('btn-call-oi', 'className'),
      Output('btn-put-oi', 'className'),
      Output('btn-call-vol', 'className'),
-     Output('btn-put-vol', 'className')],
+     Output('btn-put-vol', 'className'),
+     Output('btn-power-zone', 'className')],  # Add output for new button
     [Input('btn-net-gex', 'n_clicks'),
      Input('btn-ag', 'n_clicks'),
      Input('btn-call-oi', 'n_clicks'),
      Input('btn-put-oi', 'n_clicks'),
      Input('btn-call-vol', 'n_clicks'),
-     Input('btn-put-vol', 'n_clicks')],
+     Input('btn-put-vol', 'n_clicks'),
+     Input('btn-power-zone', 'n_clicks')],  # Add input for new button
     State('selected-params', 'data')
 )
-def update_selected_params(btn_net, btn_ag, btn_call_oi, btn_put_oi, btn_call_vol, btn_put_vol, selected_params):
+def update_selected_params(btn_net, btn_ag, btn_call_oi, btn_put_oi, btn_call_vol, btn_put_vol, btn_power_zone,
+                           selected_params):
     ctx = dash.callback_context
     if not ctx.triggered:
-        return selected_params, "parameter-button", "parameter-button", "parameter-button", "parameter-button", "parameter-button", "parameter-button"
+        return (selected_params,
+                "parameter-button", "parameter-button", "parameter-button",
+                "parameter-button", "parameter-button", "parameter-button",
+                "parameter-button")  # Add default for new button
 
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
@@ -1375,7 +2288,8 @@ def update_selected_params(btn_net, btn_ag, btn_call_oi, btn_put_oi, btn_call_vo
         "btn-call-oi": "Call OI",
         "btn-put-oi": "Put OI",
         "btn-call-vol": "Call Volume",
-        "btn-put-vol": "Put Volume"
+        "btn-put-vol": "Put Volume",
+        "btn-power-zone": "Power Zone"  # New button mapping
     }
 
     param = button_map.get(button_id)
@@ -1392,11 +2306,18 @@ def update_selected_params(btn_net, btn_ag, btn_call_oi, btn_put_oi, btn_call_vo
         "btn-call-oi": "active" if "Call OI" in selected_params else "parameter-button",
         "btn-put-oi": "active" if "Put OI" in selected_params else "parameter-button",
         "btn-call-vol": "active" if "Call Volume" in selected_params else "parameter-button",
-        "btn-put-vol": "active" if "Put Volume" in selected_params else "parameter-button"
+        "btn-put-vol": "active" if "Put Volume" in selected_params else "parameter-button",
+        "btn-power-zone": "active" if "Power Zone" in selected_params else "parameter-button"  # New button class
     }
 
-    return selected_params, button_classes["btn-net-gex"], button_classes["btn-ag"], button_classes["btn-call-oi"], \
-        button_classes["btn-put-oi"], button_classes["btn-call-vol"], button_classes["btn-put-vol"]
+    return (selected_params,
+            button_classes["btn-net-gex"],
+            button_classes["btn-ag"],
+            button_classes["btn-call-oi"],
+            button_classes["btn-put-oi"],
+            button_classes["btn-call-vol"],
+            button_classes["btn-put-vol"],
+            button_classes["btn-power-zone"])  # Add return for new button
 
 
 # Callback для обновления графика опционов (возвращаем оригинальную версию)
@@ -1414,21 +2335,45 @@ def update_options_chart(n_clicks, n_submit, dates, selected_params, ticker):
         return go.Figure()
 
     ticker = normalize_ticker(ticker)
-    options_data, _, spot_price, max_ag_strike = get_option_data(ticker, dates)
-    if options_data is None or options_data.empty:
-        return go.Figure()
 
-    fig = go.Figure()
+    # Получаем текущее значение VIX
+    current_vix = get_current_vix()
 
-    # Оригинальные параметры диапазона
-    if ticker in ["^SPX", "^NDX", "^RUT", "^Dia"]:
+    # Определяем диапазон в зависимости от VIX (только для SPX)
+    if ticker == "^SPX":
+        if current_vix < 20:
+            price_range = 0.012  # 0.012%
+        elif 20 <= current_vix < 25:
+            price_range = 0.016  # 0.016%
+        elif 25 <= current_vix < 30:
+            price_range = 0.026  # 0.026%
+        else:
+            price_range = 0.023  # 2.3%
+    elif ticker in ["^NDX", "^RUT", "^Dia"]:
         price_range = 0.017
-    elif ticker in ["SPY", "QQQ", "DIA", "XSP", "IWM"]:
+    elif ticker in ["SPY", "QQQ", "DIA", "^XSP", "^IWM"]:
         price_range = 0.03
     elif ticker in ["^VIX"]:
         price_range = 0.5
     else:
-        price_range = 0.12
+        # Для акций - проверяем цену
+        try:
+            stock_info = yf.Ticker(ticker).info
+            current_price = stock_info.get('regularMarketPrice', 0) or stock_info.get('currentPrice', 0)
+
+            if current_price < 20:
+                price_range = 2  # 200% для малых дешевых акций
+            elif 20 <= current_price < 40:
+                price_range = 0.30  # 30% для акций средней цены
+            else:
+                price_range = 0.12  # 12% для дорогих акций
+        except Exception as e:
+            print(f"Ошибка получения данных для {ticker}: {e}")
+            price_range = 0.12  # Значение по умолчанию при ошибке
+
+    options_data, _, spot_price, max_ag_strike = get_option_data(ticker, dates)
+    if options_data is None or options_data.empty:
+        return go.Figure()
 
     if spot_price:
         left_limit = spot_price - (spot_price * price_range)
@@ -1436,8 +2381,18 @@ def update_options_chart(n_clicks, n_submit, dates, selected_params, ticker):
         options_data = options_data[
             (options_data['strike'] >= left_limit) & (options_data['strike'] <= right_limit)
             ]
+    if "Power Zone" in selected_params and spot_price:
+        options_data['Power Zone'] = (
+                (options_data['Call OI'] * spot_price / 100 * spot_price * 0.005) +
+                (options_data['Put OI'] * spot_price / 100 * spot_price * 0.005) +
+                (options_data['Call Volume'] * spot_price / 100 * spot_price * 0.005) +
+                (options_data['Put Volume'] * spot_price / 100 * spot_price * 0.005)
+        ).round(1)
     else:
         left_limit = right_limit = 0
+
+        # Создаем фигуру перед использованием
+    fig = go.Figure()
 
     # Оригинальная логика отображения параметров
     for parameter in selected_params:
@@ -1473,6 +2428,20 @@ def update_options_chart(n_clicks, n_submit, dates, selected_params, ticker):
                 marker=dict(size=8, color='#915bf8'),
                 fill='tozeroy',
                 name="AG",
+                hovertext=hover_texts,
+                hoverinfo="text",
+                yaxis='y2'
+            ))
+
+        elif parameter == "Power Zone":
+            fig.add_trace(go.Scatter(
+                x=options_data['strike'],
+                y=options_data['Power Zone'],
+                mode='lines+markers',
+                line=dict(shape='spline', smoothing=0.7),
+                marker=dict(size=8, color='yellow'),
+                fill='tozeroy',
+                name="Power Zone",
                 hovertext=hover_texts,
                 hoverinfo="text",
                 yaxis='y2'
@@ -1589,7 +2558,7 @@ def update_options_chart(n_clicks, n_submit, dates, selected_params, ticker):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=0.5,
-        text="Max Power",
+        text="Quant Power",
         showarrow=False,
         font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
         textangle=0,
@@ -1598,38 +2567,80 @@ def update_options_chart(n_clicks, n_submit, dates, selected_params, ticker):
     return fig
 
 
+# Добавим функцию для получения текущего значения VIX
+def get_current_vix():
+    vix_ticker = yf.Ticker("^VIX")
+    try:
+        vix_data = vix_ticker.history(period='1d', interval='1m')
+        if not vix_data.empty:
+            return vix_data['Close'].iloc[-1]
+    except Exception as e:
+        print(f"Ошибка получения VIX: {e}")
+    return 20  # Значение по умолчанию, если не удалось получить данные
+
+
+# Callback для обновления графика price-chart
 @app.callback(
     Output('price-chart', 'figure'),
     [Input('search-button', 'n_clicks'),
      Input('ticker-input', 'n_submit')],
     [State('ticker-input', 'value')],
-    prevent_initial_call=False  # Разрешаем первоначальный вызов
+    prevent_initial_call=False
 )
 def update_price_chart(n_clicks, n_submit, ticker):
     ctx = dash.callback_context
 
-    # Если это первоначальный запуск и нет ввода от пользования
     if not ctx.triggered or ticker is None:
-        ticker = 'SPX'  # Устанавливаем SPX по умолчанию
+        ticker = 'SPX'
 
     ticker = normalize_ticker(ticker)
+
+    # Check for Max Power value from file if SPX
+    max_power_from_file = None
+    if ticker == "^SPX":
+        max_power_from_file = read_max_power_spx()
+
     interval = '1m'
-    stock = yf.Ticker(ticker)
-    data = stock.history(period='1d', interval=interval)
+    data = get_historical_data_for_chart(ticker)
 
     if data.empty:
         return go.Figure()
 
+    options_data, _, spot_price, _ = get_option_data(ticker, [])
+
+    # Добавляем проверку на None
+    if options_data is None:
+        options_data = pd.DataFrame()
+
+    # Получаем текущее значение VIX
+    current_vix = get_current_vix()
+
+    # Determine price range based on VIX and ticker type
+    if ticker == "^SPX":
+        if current_vix < 20:
+            price_range = 0.01
+        elif 20 <= current_vix < 25:
+            price_range = 0.018
+        elif 25 <= current_vix < 30:
+            price_range = 0.026
+        else:
+            price_range = 0.04
+    elif ticker in ["^NDX", "^RUT", "^Dia"]:
+        price_range = 0.017
+    elif ticker in ["SPY", "QQQ", "DIA", "XSP", "IWM"]:
+        price_range = 0.02
+    elif ticker in ["^VIX"]:
+        price_range = 0.5
+    else:
+        price_range = 0.12
+
+    # Calculate VWAP
     data['CumulativeVolume'] = data['Volume'].cumsum()
     data['CumulativePV'] = (data['Volume'] * (data['High'] + data['Low'] + data['Close']) / 3).cumsum()
     data['VWAP'] = data['CumulativePV'] / data['CumulativeVolume']
 
-    options_data, _, spot_price, max_ag_strike = get_option_data(ticker, [])
-
-    if ticker in ["^SPX", "^NDX", "^RUT", "^DJI", "SPY", "QQQ", "IWM"]:
-        price_range = 0.017
-    else:
-        price_range = 0.05
+    # Get options data
+    options_data, _, spot_price, _ = get_option_data(ticker, [])
 
     if spot_price:
         left_limit = spot_price - (spot_price * price_range)
@@ -1657,9 +2668,21 @@ def update_price_chart(n_clicks, n_submit, ticker):
         else:
             max_p1_strike = None
 
-        max_n1_strike = visible_options_data.loc[visible_options_data['Net GEX'].idxmin(), 'strike']
+        # Проверяем наличие отрицательных значений Net GEX перед отображением N1
+        has_negative_gex = (visible_options_data['Net GEX'] < 0).any()
+        if has_negative_gex:
+            max_n1_strike = visible_options_data.loc[visible_options_data['Net GEX'].idxmin(), 'strike']
+        else:
+            max_n1_strike = None
+
         max_call_vol_strike = visible_options_data.loc[visible_options_data['Call Volume'].idxmax(), 'strike']
         max_put_vol_strike = visible_options_data.loc[visible_options_data['Put Volume'].idxmax(), 'strike']
+        # Подготовка данных для зоны Call OI
+        call_oi_data = visible_options_data[['strike', 'Call OI']].copy()
+        call_oi_data = call_oi_data.sort_values('strike')
+        max_call_oi = call_oi_data['Call OI'].max()
+        call_oi_data['Call OI Normalized'] = (call_oi_data[
+                                                  'Call OI'] / max_call_oi) * 0.8  # Нормализация для ширины зоны
     else:
         max_ag_strike = None
         max_p1_strike = None
@@ -1667,19 +2690,54 @@ def update_price_chart(n_clicks, n_submit, ticker):
         max_call_vol_strike = None
         max_put_vol_strike = None
 
+    # Prepare Power Zone data (only for SPX)
+    if ticker == "^SPX" and not visible_options_data.empty:
+        # Calculate Power Zone (combination of OI and Volume)
+        visible_options_data['Power Zone'] = (
+                (visible_options_data['Call OI'] * spot_price / 100 * spot_price * 0.005) +
+                (visible_options_data['Put OI'] * spot_price / 100 * spot_price * 0.005) +
+                (visible_options_data['Call Volume'] * spot_price / 100 * spot_price * 0.005) +
+                (visible_options_data['Put Volume'] * spot_price / 100 * spot_price * 0.005)
+        ).round(1)
+
+        power_zone_data = visible_options_data[['strike', 'Power Zone']].copy()
+        power_zone_data = power_zone_data.sort_values('strike')
+
+        # Add mid-points for smoother curve
+        if len(power_zone_data) > 1:
+            new_points = []
+            for i in range(len(power_zone_data) - 1):
+                mid_strike = (power_zone_data.iloc[i]['strike'] + power_zone_data.iloc[i + 1]['strike']) / 2
+                mid_value = (power_zone_data.iloc[i]['Power Zone'] + power_zone_data.iloc[i + 1]['Power Zone']) / 2
+                new_points.append({'strike': mid_strike, 'Power Zone': mid_value})
+
+            power_zone_data = pd.concat([power_zone_data, pd.DataFrame(new_points)]).sort_values('strike')
+
+        max_power = power_zone_data['Power Zone'].max()
+        if max_power > 0:
+            power_zone_data['Power Zone Normalized'] = (power_zone_data['Power Zone'] / max_power) * 0.3
+        else:
+            power_zone_data['Power Zone Normalized'] = 0
+    else:
+        power_zone_data = pd.DataFrame()
+
+    # Market time references
     market_open_time = datetime.now().replace(hour=9, minute=30, second=0, microsecond=0)
     market_close_time = datetime.now().replace(hour=16, minute=0, second=0, microsecond=0)
     current_time = datetime.now()
 
+    # Line widths configuration
     line_widths = {
         'AG': 7,
         'P1': 5,
         'N1': 5,
         'Call Vol': 4,
         'Put Vol': 4,
-        'Max Power': 3
+        'Max Power': 3,
+        'Power Zone': 2
     }
 
+    # Create figure
     fig = go.Figure()
 
     fig.add_trace(go.Candlestick(
@@ -1690,6 +2748,22 @@ def update_price_chart(n_clicks, n_submit, ticker):
         close=data['Close'],
         name=""
     ))
+
+    # Power Zone вертикально (только для SPX)
+    if ticker == "^SPX" and not power_zone_data.empty and max_power > 0:
+        fig.add_trace(go.Scatter(
+            x=market_open_time + (market_close_time - market_open_time) * power_zone_data['Power Zone Normalized'],
+            y=power_zone_data['strike'],
+            mode='lines+markers',
+            line=dict(shape='spline', smoothing=0.8, color='yellow', width=2),
+            marker=dict(size=1, color='yellow'),
+            name='Power Zone',
+            fill='tozerox',
+            fillcolor='rgba(255, 255, 0, 0.2)',
+            hoverinfo='text',
+            hovertext=[f'Strike: {strike:.2f}<br>Power: {power:,.0f}'
+                      for strike, power in zip(power_zone_data['strike'], power_zone_data['Power Zone'])]
+        ))
 
     # Добавляем линию P1 только если есть положительные значения Net GEX
     if max_p1_strike is not None:
@@ -1702,6 +2776,7 @@ def update_price_chart(n_clicks, n_submit, ticker):
             yaxis='y'
         ))
 
+    # Добавляем линию N1 только если есть отрицательные значения Net GEX
     if max_n1_strike is not None:
         fig.add_trace(go.Scatter(
             x=[market_open_time, market_close_time],
@@ -1733,13 +2808,25 @@ def update_price_chart(n_clicks, n_submit, ticker):
         ))
 
     # Определяем Max Power Strike
-    if current_time - market_open_time <= timedelta(minutes=45):
-        max_power_strike = max_call_vol_strike if max_call_vol_strike is not None else max_put_vol_strike
+    if max_power_from_file is not None and ticker == "^SPX":
+        # Use value from file if available for SPX
+        max_power_strike = max_power_from_file
     else:
-        if max_ag_strike is not None:
-            max_power_strike = max_ag_strike
-        else:
+        if current_time - market_open_time <= timedelta(minutes=45):
             max_power_strike = max_call_vol_strike if max_call_vol_strike is not None else max_put_vol_strike
+        else:
+            # Новая логика после первых 45 минут
+            if not options_data.empty and spot_price:
+                # Вычисляем комбинированный показатель
+                combined_power = (
+                        (options_data['Call OI'] * spot_price / 100 * spot_price * 0.005) +
+                        (options_data['Put OI'] * spot_price / 100 * spot_price * 0.005) +
+                        (options_data['Call Volume'] * spot_price / 100 * spot_price * 0.005) +
+                        (options_data['Put Volume'] * spot_price / 100 * spot_price * 0.005)
+                ).round(1)
+                max_power_strike = options_data.loc[combined_power.idxmax(), 'strike']
+            else:
+                max_power_strike = max_call_vol_strike if max_call_vol_strike is not None else max_put_vol_strike
 
     if max_power_strike is not None:
         fig.add_trace(go.Scatter(
@@ -1747,7 +2834,7 @@ def update_price_chart(n_clicks, n_submit, ticker):
             y=[max_power_strike, max_power_strike],
             mode='lines',
             line=dict(color='#ffdf00', width=line_widths['Max Power']),
-            name=f'Max Power: {max_power_strike:.2f}',
+            name=f'Quant Power: {max_power_strike:.2f}',
             yaxis='y'
         ))
 
@@ -1764,7 +2851,7 @@ def update_price_chart(n_clicks, n_submit, ticker):
     fig.update_layout(
         title=f"{ticker}",
         xaxis=dict(
-            title="Время",
+            title="Time",
             type='date',
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
@@ -1774,7 +2861,7 @@ def update_price_chart(n_clicks, n_submit, ticker):
             fixedrange=True
         ),
         yaxis=dict(
-            title="Цена",
+            title="price",
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
             fixedrange=True
@@ -1790,7 +2877,7 @@ def update_price_chart(n_clicks, n_submit, ticker):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=0.5,
-        text="Max Power",
+        text="Quant Power",
         showarrow=False,
         font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
         textangle=0,
@@ -1805,23 +2892,30 @@ def update_price_chart(n_clicks, n_submit, ticker):
     [Input('search-button', 'n_clicks'),
      Input('ticker-input', 'n_submit')],
     [State('ticker-input', 'value')],
-    prevent_initial_call=False  # Разрешаем первоначальный вызов
+    prevent_initial_call=False
 )
 def update_price_chart_simplified(n_clicks, n_submit, ticker):
     ctx = dash.callback_context
 
-    # Если это первоначальный запуск - используем SPX
     if not ctx.triggered:
         ticker = 'SPX'
-    elif not ticker:  # Если поле пустое
+    elif not ticker:
         ticker = 'SPX'
 
     ticker = normalize_ticker(ticker)
     interval = '1m'
-    stock = yf.Ticker(ticker)
-    data = stock.history(period='1d', interval=interval)
+    data = get_historical_data_for_chart(ticker)
 
     if data.empty:
+        return go.Figure()
+
+    # Используем новую функцию для расчета VWAP
+    vwap_data = calculate_vwap(data, ticker)
+
+    # Остальной код остается без изменений...
+    options_data, _, spot_price, _ = get_option_data(ticker, [])
+
+    if options_data is None or options_data.empty:
         return go.Figure()
 
     data['CumulativeVolume'] = data['Volume'].cumsum()
@@ -1888,7 +2982,7 @@ def update_price_chart_simplified(n_clicks, n_submit, ticker):
 
     fig.add_trace(go.Scatter(
         x=data.index,
-        y=data['VWAP'],
+        y=vwap_data,
         mode='lines',
         line=dict(color='#00ffcc', width=2),
         name='VWAP'
@@ -1922,7 +3016,7 @@ def update_price_chart_simplified(n_clicks, n_submit, ticker):
     fig.update_layout(
         title=f"Support / Resistance {ticker}",
         xaxis=dict(
-            title="Время",
+            title="Time",
             type='date',
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
@@ -1932,7 +3026,7 @@ def update_price_chart_simplified(n_clicks, n_submit, ticker):
             fixedrange=True
         ),
         yaxis=dict(
-            title="Цена",
+            title="Price",
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
             fixedrange=True
@@ -1948,7 +3042,7 @@ def update_price_chart_simplified(n_clicks, n_submit, ticker):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=0.5,
-        text="Max Power",
+        text="Quant Power",
         showarrow=False,
         font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
         textangle=0,
@@ -1966,6 +3060,8 @@ def update_price_chart_simplified(n_clicks, n_submit, ticker):
 def display_page(pathname, search):
     if pathname == '/key-levels':
         return key_levels_page
+    elif pathname == '/oi-volume':  # Новое условие
+        return oi_volume_page
     elif pathname == '/options-summary':
         return options_summary_page
     elif pathname == '/how-to-use-gex':
@@ -2007,12 +3103,12 @@ def update_key_levels_chart_callback(n_clicks, n_submit, ticker):
 
     return update_key_levels_chart(ticker)
 
+
 @cache.memoize(timeout=60)  # Кэшируем на 5 минут
 def update_key_levels_chart(ticker):
     ticker = normalize_ticker(ticker)
     interval = '1m'
-    stock = yf.Ticker(ticker)
-    data = stock.history(period='1d', interval=interval)
+    data = get_historical_data_for_chart(ticker)
 
     if data.empty:
         return go.Figure()
@@ -2029,11 +3125,11 @@ def update_key_levels_chart(ticker):
 
     # Определяем диапазон для всего графика (4% от цены открытия)
     if ticker in ["^SPX", "^NDX", "^RUT", "^DJI", "^VIX"]:
-        chart_range = 0.045  # 4% для индексов
+        chart_range = 0.032  # 4% для индексов
     elif ticker in ["SPY", "QQQ", "DIA", "XSP", "IWM"]:
-        chart_range = 0.05  # 4% для ETF
+        chart_range = 0.032  # 4% для ETF
     else:
-        chart_range = 0.2  # 10% для акций
+        chart_range = 0.08  # 10% для акций
 
     if open_price:
         upper_limit = open_price * (1 + chart_range / 2)
@@ -2276,7 +3372,563 @@ def update_key_levels_chart(ticker):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=0.5,
-        text="Max Power",
+        text="Quant Power",
+        showarrow=False,
+        font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
+        textangle=0,
+    )
+
+    return fig
+
+
+# Callback for updating date dropdown on OI Volume page
+@app.callback(
+    [Output('date-dropdown-oi-volume', 'options'),
+     Output('date-dropdown-oi-volume', 'value')],
+    [Input('search-button-oi-volume', 'n_clicks'),
+     Input('ticker-input-oi-volume', 'n_submit')],
+    [State('ticker-input-oi-volume', 'value')],
+    prevent_initial_call=False
+)
+def update_oi_volume_dates(n_clicks, n_submit, ticker):
+    ctx = dash.callback_context
+
+    if not ctx.triggered:
+        ticker = 'SPX'
+    elif not ticker:
+        ticker = 'SPX'
+
+    ticker = normalize_ticker(ticker)
+
+    # Get dates from file
+    file_dates = load_expirations_from_file(ticker)
+
+    # Get dates from yfinance
+    yfinance_dates = get_yfinance_expirations(ticker)
+
+    # Combine dates, preserving order and uniqueness
+    if file_dates:
+        # If we have file dates, only add yfinance dates that are newer than the last file date
+        last_file_date = datetime.strptime(file_dates[-1], '%Y-%m-%d')
+        additional_dates = [
+            date for date in yfinance_dates
+            if datetime.strptime(date, '%Y-%m-%d') > last_file_date
+        ]
+        available_dates = file_dates + additional_dates
+    else:
+        # If no file or empty file, use yfinance dates only
+        available_dates = yfinance_dates
+
+    if not available_dates:
+        print(f"No expiration dates available for {ticker}")
+        return [], []
+
+    options = [{'label': date, 'value': date} for date in available_dates]
+    return options, [available_dates[0]] if available_dates else []
+
+
+# Callback for updating selected parameters on OI Volume page
+@app.callback(
+    [Output('selected-params-oi-volume', 'data'),
+     Output('btn-volume-spread', 'className'),
+     Output('btn-call-oi-oi-volume', 'className'),
+     Output('btn-put-oi-oi-volume', 'className'),
+     Output('btn-call-vol-oi-volume', 'className'),
+     Output('btn-put-vol-oi-volume', 'className')],
+    [Input('btn-volume-spread', 'n_clicks'),
+     Input('btn-call-oi-oi-volume', 'n_clicks'),
+     Input('btn-put-oi-oi-volume', 'n_clicks'),
+     Input('btn-call-vol-oi-volume', 'n_clicks'),
+     Input('btn-put-vol-oi-volume', 'n_clicks')],
+    State('selected-params-oi-volume', 'data')
+)
+def update_selected_params_oi_volume(btn_vol_spread, btn_call_oi, btn_put_oi, btn_call_vol, btn_put_vol,
+                                     selected_params):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return (selected_params,
+                "active", "parameter-button", "parameter-button",
+                "parameter-button", "parameter-button")
+
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    button_map = {
+        "btn-volume-spread": "Volume Spread",
+        "btn-call-oi-oi-volume": "Call OI",
+        "btn-put-oi-oi-volume": "Put OI",
+        "btn-call-vol-oi-volume": "Call Volume",
+        "btn-put-vol-oi-volume": "Put Volume"
+    }
+
+    param = button_map.get(button_id)
+
+    if param:
+        if param in selected_params:
+            selected_params.remove(param)
+        else:
+            selected_params.append(param)
+
+    button_classes = {
+        "btn-volume-spread": "active" if "Volume Spread" in selected_params else "parameter-button",
+        "btn-call-oi-oi-volume": "active" if "Call OI" in selected_params else "parameter-button",
+        "btn-put-oi-oi-volume": "active" if "Put OI" in selected_params else "parameter-button",
+        "btn-call-vol-oi-volume": "active" if "Call Volume" in selected_params else "parameter-button",
+        "btn-put-vol-oi-volume": "active" if "Put Volume" in selected_params else "parameter-button"
+    }
+
+    return (selected_params,
+            button_classes["btn-volume-spread"],
+            button_classes["btn-call-oi-oi-volume"],
+            button_classes["btn-put-oi-oi-volume"],
+            button_classes["btn-call-vol-oi-volume"],
+            button_classes["btn-put-vol-oi-volume"])
+
+
+# Callback for updating OI Volume chart
+@app.callback(
+    Output('oi-volume-chart', 'figure'),
+    [Input('search-button-oi-volume', 'n_clicks'),
+     Input('ticker-input-oi-volume', 'n_submit'),
+     Input('date-dropdown-oi-volume', 'value'),
+     Input('selected-params-oi-volume', 'data')],
+    [State('ticker-input-oi-volume', 'value')]
+)
+def update_oi_volume_chart(n_clicks, n_submit, dates, selected_params, ticker):
+    ctx = dash.callback_context
+    if not ctx.triggered or not dates or not selected_params:
+        return go.Figure()
+
+    ticker = normalize_ticker(ticker)
+
+    # Get current VIX value
+    current_vix = get_current_vix()
+
+    # Determine price range based on VIX and ticker type
+    if ticker == "^SPX":
+        if current_vix < 20:
+            price_range = 0.014  # 1.4%
+        elif 20 <= current_vix < 25:
+            price_range = 0.018  # 1.8%
+        elif 25 <= current_vix < 30:
+            price_range = 0.026  # 2.6%
+        else:
+            price_range = 0.04  # 4%
+    elif ticker in ["^NDX", "^RUT", "^Dia"]:
+        price_range = 0.017
+    elif ticker in ["SPY", "QQQ", "DIA", "XSP", "IWM"]:
+        price_range = 0.03
+    elif ticker in ["^VIX"]:
+        price_range = 0.5
+    else:
+        price_range = 0.12
+
+    options_data, _, spot_price, _ = get_option_data(ticker, dates)
+    if options_data is None or options_data.empty:
+        return go.Figure()
+
+    if spot_price:
+        left_limit = spot_price - (spot_price * price_range)
+        right_limit = spot_price + (spot_price * price_range)
+        options_data = options_data[
+            (options_data['strike'] >= left_limit) & (options_data['strike'] <= right_limit)
+            ]
+
+    # Calculate Volume Spread
+    options_data['Volume Spread'] = (
+            (options_data['Call Volume']) -
+            (options_data['Put Volume'])
+    ).round(1)
+
+    # Create figure
+    fig = go.Figure()
+
+    # Original logic for displaying parameters
+    for parameter in selected_params:
+        hover_texts = [
+            f"Strike: {strike}<br>Call OI: {coi}<br>Put OI: {poi}<br>Call Volume: {cvol}<br>Put Volume: {pvol}<br>{parameter}: {val}"
+            for strike, coi, poi, cvol, pvol, val in zip(
+                options_data['strike'],
+                options_data['Call OI'],
+                options_data['Put OI'],
+                options_data['Call Volume'],
+                options_data['Put Volume'],
+                options_data[parameter]
+            )
+        ]
+
+        if parameter == "Volume Spread":
+            fig.add_trace(go.Bar(
+                x=options_data['strike'],
+                y=options_data['Volume Spread'],
+                marker_color=['#22b5ff' if v >= 0 else 'red' for v in options_data['Volume Spread']],
+                name="Volume Spread",
+                hovertext=hover_texts,
+                hoverinfo="text",
+                marker=dict(line=dict(width=0))
+            ))
+
+        elif parameter == "Call OI":
+            fig.add_trace(go.Scatter(
+                x=options_data['strike'],
+                y=options_data['Call OI'],
+                mode='lines+markers',
+                line=dict(shape='spline', smoothing=0.7),
+                marker=dict(size=8, color='#02d432'),
+                fill='tozeroy',
+                name="Call OI",
+                hovertext=hover_texts,
+                hoverinfo="text",
+                yaxis='y2'
+            ))
+
+        elif parameter == "Put OI":
+            fig.add_trace(go.Scatter(
+                x=options_data['strike'],
+                y=options_data['Put OI'],
+                mode='lines+markers',
+                line=dict(shape='spline', smoothing=0.7),
+                marker=dict(size=8, color='#f32d35'),
+                fill='tozeroy',
+                name="Put OI",
+                hovertext=hover_texts,
+                hoverinfo="text",
+                yaxis='y2'
+            ))
+
+        elif parameter == "Call Volume":
+            fig.add_trace(go.Scatter(
+                x=options_data['strike'],
+                y=options_data['Call Volume'],
+                mode='lines+markers',
+                line=dict(shape='spline', smoothing=0.7),
+                marker=dict(size=8, color='#003cfe'),
+                fill='tozeroy',
+                name="Call Volume",
+                hovertext=hover_texts,
+                hoverinfo="text",
+                yaxis='y2'
+            ))
+
+        elif parameter == "Put Volume":
+            fig.add_trace(go.Scatter(
+                x=options_data['strike'],
+                y=options_data['Put Volume'],
+                mode='lines+markers',
+                line=dict(shape='spline', smoothing=0.7),
+                marker=dict(size=8, color='#e55f04'),
+                fill='tozeroy',
+                name="Put Volume",
+                hovertext=hover_texts,
+                hoverinfo="text",
+                yaxis='y2'
+            ))
+
+    if spot_price:
+        fig.add_vline(
+            x=spot_price,
+            line_dash="solid",
+            line_color="orange",
+            annotation_text=f"Price: {spot_price:.2f}",
+            annotation_position="top",
+            annotation_font=dict(color="orange"),
+        )
+
+    # Original chart styling
+    fig.update_layout(
+        xaxis=dict(
+            title="Strike",
+            showgrid=False,
+            zeroline=False,
+            tickmode='array',
+            tickvals=options_data['strike'].tolist(),
+            tickformat='1',
+            fixedrange=True
+        ),
+        yaxis=dict(
+            title="Volume Spread",
+            side="left",
+            showgrid=False,
+            zeroline=False,
+            fixedrange=True
+        ),
+        yaxis2=dict(
+            title="",
+            side="right",
+            overlaying="y",
+            showgrid=False,
+            zeroline=False,
+            fixedrange=True
+        ),
+        title=f"difference between call and put volumes {ticker}",
+        plot_bgcolor='#1e1e1e',
+        paper_bgcolor='#1e1e1e',
+        font=dict(color='white'),
+        dragmode=False,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
+
+    # Add watermark
+    fig.add_annotation(
+        xref="paper", yref="paper",
+        x=0.5, y=0.5,
+        text="Quant Power",
+        showarrow=False,
+        font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
+        textangle=0,
+    )
+
+    return fig
+
+# Callback for updating OI Volume price chart
+@app.callback(
+    Output('oi-volume-price-chart', 'figure'),
+    [Input('search-button-oi-volume', 'n_clicks'),
+     Input('ticker-input-oi-volume', 'n_submit')],
+    [State('ticker-input-oi-volume', 'value'),
+     State('date-dropdown-oi-volume', 'value')],
+    prevent_initial_call=False
+)
+def update_oi_volume_price_chart(n_clicks, n_submit, ticker, dates):
+    ctx = dash.callback_context
+
+    if not ctx.triggered or ticker is None:
+        ticker = 'SPX'
+
+    ticker = normalize_ticker(ticker)
+    interval = '1m'
+    data = get_historical_data_for_chart(ticker)
+
+    if data.empty:
+        return go.Figure()
+
+    options_data, _, spot_price, _ = get_option_data(ticker, dates)
+
+    if options_data is None or options_data.empty:
+        return go.Figure()
+
+    # Calculate Volume Spread
+    options_data['Volume Spread'] = (
+            (options_data['Call Volume']) -
+            (options_data['Put Volume'])
+    ).round(1)
+
+    # Determine price range
+    if ticker in ["^SPX", "^NDX", "^RUT", "^Dia"]:
+        price_range = 0.01
+    elif ticker in ["SPY", "QQQ", "DIA", "XSP", "IWM"]:
+        price_range = 0.022
+    else:
+        price_range = 0.05
+
+    if spot_price:
+        left_limit = spot_price - (spot_price * price_range)
+        right_limit = spot_price + (spot_price * price_range)
+        options_data = options_data[
+            (options_data['strike'] >= left_limit) & (options_data['strike'] <= right_limit)
+            ]
+    else:
+        left_limit = right_limit = 0
+
+    # Calculate VWAP
+    data['CumulativeVolume'] = data['Volume'].cumsum()
+    data['CumulativePV'] = (data['Volume'] * (data['High'] + data['Low'] + data['Close']) / 3).cumsum()
+    data['VWAP'] = data['CumulativePV'] / data['CumulativeVolume']
+
+    # Get key levels
+    max_call_vol_strike = options_data.loc[options_data['Call Volume'].idxmax(), 'strike']
+    max_put_vol_strike = options_data.loc[options_data['Put Volume'].idxmax(), 'strike']
+    max_volume_spread_strike = options_data.loc[options_data['Volume Spread'].idxmax(), 'strike']
+    min_volume_spread_strike = options_data.loc[options_data['Volume Spread'].idxmin(), 'strike']
+
+    # Market time references
+    market_open_time = datetime.now().replace(hour=9, minute=30, second=0, microsecond=0)
+    market_close_time = datetime.now().replace(hour=16, minute=0, second=0, microsecond=0)
+
+    # Create figure
+    fig = go.Figure()
+
+    fig.add_trace(go.Candlestick(
+        x=data.index,
+        open=data['Open'],
+        high=data['High'],
+        low=data['Low'],
+        close=data['Close'],
+        name="Price"
+    ))
+
+
+    # Add Call OI zone (left side)
+    if not options_data.empty:
+        call_oi_data = options_data[['strike', 'Call OI']].copy()
+        call_oi_data = call_oi_data.sort_values('strike')
+        max_call_oi = call_oi_data['Call OI'].max()
+        if max_call_oi > 0:
+            call_oi_data['Call OI Normalized'] = (call_oi_data['Call OI'] / max_call_oi) * 0.3
+
+            fig.add_trace(go.Scatter(
+                x=market_open_time + (market_close_time - market_open_time) * call_oi_data['Call OI Normalized'],
+                y=call_oi_data['strike'],
+                mode='lines+markers',
+                line=dict(shape='spline', smoothing=0.8, color='#02d432', width=2),
+                marker=dict(size=1, color='#02d432'),
+                name='Call OI',
+                fill='tozerox',
+                fillcolor='rgba(2, 212, 50, 0.2)',
+                hoverinfo='text',
+                hovertext=[f'Strike: {strike:.2f}<br>Call OI: {oi:,.0f}'
+                           for strike, oi in zip(call_oi_data['strike'], call_oi_data['Call OI'])]
+            ))
+
+    # Add Put OI zone (right side)
+    if not options_data.empty:
+        put_oi_data = options_data[['strike', 'Put OI']].copy()
+        put_oi_data = put_oi_data.sort_values('strike')
+        max_put_oi = put_oi_data['Put OI'].max()
+        if max_put_oi > 0:
+            put_oi_data['Put OI Normalized'] = (put_oi_data['Put OI'] / max_put_oi) * 0.3
+
+
+
+            fig.add_trace(go.Scatter(
+                x=market_open_time + (market_close_time - market_open_time) * put_oi_data['Put OI Normalized'],
+                y=put_oi_data['strike'],
+                mode='lines+markers',
+                line=dict(shape='spline', smoothing=0.8, color='#f32d35', width=2),
+                marker=dict(size=1, color='#f32d35'),
+                name='Put OI',
+                fill='tozerox',
+                fillcolor='rgba(243, 45, 53, 0.2)',
+                hoverinfo='text',
+                hovertext=[f'Strike: {strike:.2f}<br>Put OI: {oi:,.0f}'
+                           for strike, oi in zip(put_oi_data['strike'], put_oi_data['Put OI'])]
+            ))
+
+        # Add Call Volume zone (NEW - left side, above Call OI)
+        if not options_data.empty:
+            call_vol_data = options_data[['strike', 'Call Volume']].copy()
+            call_vol_data = call_vol_data.sort_values('strike')
+            max_call_vol = call_vol_data['Call Volume'].max()
+            if max_call_vol > 0:
+                call_vol_data['Call Vol Normalized'] = (call_vol_data['Call Volume'] / max_call_vol) * 0.3
+
+                fig.add_trace(go.Scatter(
+                    x=market_open_time + (market_close_time - market_open_time) * call_vol_data['Call Vol Normalized'],
+                    y=call_vol_data['strike'],
+                    mode='lines+markers',
+                    line=dict(shape='spline', smoothing=0.8, color='#003cfe', width=2,),
+                    marker=dict(size=1, color='#003cfe'),
+                    name='Call Volume',
+                    fill='tozerox',
+                    fillcolor='rgba(0, 60, 254, 0.1)',
+                    hoverinfo='text',
+                    hovertext=[f'Strike: {strike:.2f}<br>Call Volume: {vol:,.0f}'
+                               for strike, vol in zip(call_vol_data['strike'], call_vol_data['Call Volume'])]
+                ))
+
+        # Add Put Volume zone (right side, orange) - NEW
+        if not options_data.empty:
+            put_vol_data = options_data[['strike', 'Put Volume']].copy()
+            put_vol_data = put_vol_data.sort_values('strike')
+            max_put_vol = put_vol_data['Put Volume'].max()
+            if max_put_vol > 0:
+                put_vol_data['Put Vol Normalized'] = (put_vol_data['Put Volume'] / max_put_vol) * 0.3
+
+                fig.add_trace(go.Scatter(
+                    x=market_open_time + (market_close_time - market_open_time) * put_vol_data[
+                        'Put Vol Normalized'],
+                    y=put_vol_data['strike'],
+                    mode='lines+markers',
+                    line=dict(shape='spline', smoothing=0.8, color='#e55f04', width=2,),
+                    marker=dict(size=1, color='#e55f04'),
+                    name='Put Volume',
+                    fill='tozerox',
+                    fillcolor='rgba(229, 95, 4, 0.1)',
+                    hoverinfo='text',
+                    hovertext=[f'Strike: {strike:.2f}<br>Put Volume: {vol:,.0f}'
+                               for strike, vol in zip(put_vol_data['strike'], put_vol_data['Put Volume'])]
+                ))
+    # Add key levels
+    if max_call_vol_strike:
+        fig.add_trace(go.Scatter(
+            x=[market_open_time, market_close_time],
+            y=[max_call_vol_strike, max_call_vol_strike],
+            mode='lines',
+            line=dict(color='#003cfe', width=2),
+            name=f'Max Call Vol: {max_call_vol_strike:.2f}'
+        ))
+
+    if max_put_vol_strike:
+        fig.add_trace(go.Scatter(
+            x=[market_open_time, market_close_time],
+            y=[max_put_vol_strike, max_put_vol_strike],
+            mode='lines',
+            line=dict(color='#e55f04', width=2),
+            name=f'Max Put Vol: {max_put_vol_strike:.2f}'
+        ))
+
+    if max_volume_spread_strike:
+        fig.add_trace(go.Scatter(
+            x=[market_open_time, market_close_time],
+            y=[max_volume_spread_strike, max_volume_spread_strike],
+            mode='lines',
+            line=dict(color='#22b5ff', width=2, dash='dot'),
+            name=f'Max Vol Spread: {max_volume_spread_strike:.2f}'
+        ))
+
+    if min_volume_spread_strike:
+        fig.add_trace(go.Scatter(
+            x=[market_open_time, market_close_time],
+            y=[min_volume_spread_strike, min_volume_spread_strike],
+            mode='lines',
+            line=dict(color='red', width=2, dash='dot'),
+            name=f'Min Vol Spread: {min_volume_spread_strike:.2f}'
+        ))
+
+    fig.update_layout(
+        title=f"{ticker} Price with OI/Volume Levels",
+        xaxis=dict(
+            title="Time",
+            type='date',
+            showgrid=True,
+            gridcolor='rgba(128, 128, 128, 0.2)',
+            rangeslider=dict(visible=False),
+            autorange=False,
+            range=[market_open_time, market_close_time],
+            fixedrange=True
+        ),
+        yaxis=dict(
+            title="Price",
+            showgrid=True,
+            gridcolor='rgba(128, 128, 128, 0.2)',
+            fixedrange=True
+        ),
+        plot_bgcolor='#1e1e1e',
+        paper_bgcolor='#1e1e1e',
+        font=dict(color='white'),
+        hovermode='x unified',
+        margin=dict(l=50, r=50, b=50, t=80),
+        dragmode=False,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(size=10)
+        )
+    )
+
+    fig.add_annotation(
+        xref="paper", yref="paper",
+        x=0.5, y=0.5,
+        text="Quant Power",
         showarrow=False,
         font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
         textangle=0,
@@ -2295,7 +3947,7 @@ def update_options_summary_table(pathname):
     return []
 
 
-@cache.memoize(timeout=600)  # Кэшируем на 10 минут
+@cache.memoize(timeout=600)
 def get_pc_ratio_data():
     # Определяем индексы и ETF
     indices_etfs = ["SPX", "SPY", "QQQ", "VIX", "DIA", "IWM", "RUT"]
@@ -2310,10 +3962,10 @@ def get_pc_ratio_data():
 
     for ticker in tickers:
         normalized_ticker = normalize_ticker(ticker)
-        stock = yf.Ticker(normalized_ticker)
 
         try:
-            price = stock.history(period='1d')['Close'].iloc[-1]
+            # ИСПРАВЛЕНИЕ: используем get_yfinance_spot_price для получения правильной цены SPX
+            price = get_yfinance_spot_price(normalized_ticker)
         except:
             price = None
 
@@ -2371,8 +4023,7 @@ def get_pc_ratio_data():
     return table_data
 
 
-
-
 # Запуск приложения
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=8080)
+    app.run(host="0.0.0.0", port=8080, debug=False)
+

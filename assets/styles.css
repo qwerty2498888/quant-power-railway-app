@@ -1,11 +1,15 @@
 /* Общие стили */
 body {
-    background-color: #191919;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
     color: white;
     font-family: 'Inter', sans-serif;
     margin: 0;
     padding: 0;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
 }
+
 
 
 .graph-container {
@@ -16,17 +20,26 @@ body {
     padding: 10px; /* Отступы внутри контейнера */
 }
 
-/* Заголовок */
+/* Заголовки */
+h1, h2, h3, h4, h5, h6 {
+    color: white;
+}
+
 h1 {
     text-align: center;
-    font-size: 32px;
+    font-size: 2.5rem;
     font-weight: bold;
     margin-bottom: 20px;
+    background: linear-gradient(90deg, #00ffcc, #008cff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 2px 10px rgba(0, 255, 204, 0.3);
 }
 
 /* Контейнеры */
 .dash-container {
-    background-color: #1e1e1e;
+    background-color: rgba(30,30,30,0.8);
     padding: 15px;
     border-radius: 8px;
     margin: 10px auto;
@@ -47,9 +60,6 @@ h1 {
     transition: 0.3s;
 }
 
-.dash-input:focus {
-    border: 2px solid #22b5ff;
-}
 
 /* Кнопки */
 .button-container {
@@ -61,13 +71,13 @@ h1 {
 }
 
 .parameter-button {
-    padding: 12px 20px;
+    padding: 10px 10px;
     border: none;
     border-radius: 6px;
     cursor: pointer;
     font-size: 16px;
-    transition: 0.3s;
-    min-width: 120px;
+
+    min-width: 70px;
     text-align: center;
 }
 
@@ -76,19 +86,38 @@ h1 {
 }
 
 /* Цвета кнопок */
-#btn-net-gex { background-color: #22b5ff; color: black; }
+#btn-net-gex { background-color: #22b5ff; color: white; }
 #btn-ag { background-color: #915bf8; color: white; }
-#btn-call-oi { background-color: #02d432; color: black; }
+#btn-call-oi { background-color: #02d432; color: white; }
 #btn-put-oi { background-color: #f32d35; color: white; }
 #btn-call-vol { background-color: #003cfe; color: white; }
 #btn-put-vol { background-color: #e55f04; color: white; }
+#btn-power-zone { background-color: #e8ca01; color: black; }
 
 /* Активные кнопки */
 .parameter-button.active {
     transform: scale(0.95);
     box-shadow: inset 0px 0px 8px rgba(255, 255, 255, 0.3);
 }
-
+/* Основные кнопки */
+.dash-button {
+    padding: 10px 10px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #00ffcc 0%, #008cff 100%);
+    color: #1e1e1e;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 255, 204, 0.3);
+}
+/* Стили для кнопок на странице OI Volume */
+#btn-volume-spread { background-color: #22b5ff; color: white; }
+#btn-call-oi-oi-volume { background-color: #02d432; color: white; }
+#btn-put-oi-oi-volume { background-color: #f32d35; color: white; }
+#btn-call-vol-oi-volume { background-color: #003cfe; color: white; }
+#btn-put-vol-oi-volume { background-color: #e55f04; color: white; }
 /* Выпадающий список */
 .dash-dropdown .Select-control {
     background-color: #3a3a3a;
@@ -106,7 +135,7 @@ h1 {
 }
 
 .dash-dropdown .Select-option.is-selected {
-    background-color: #22b5ff;
+    background-color: white;
     color: white;
 }
 
@@ -117,4 +146,12 @@ h1 {
     padding: 15px;
     box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
 
-
+app.css.append_css({
+    'external_url': '''
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+            100% { transform: translateY(0px); }
+        }
+    '''
+})
