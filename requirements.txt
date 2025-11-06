@@ -4,3 +4,4 @@ pandas
 yfinance
 Flask-Caching
 gunicorn
+pysqlite3-binary
