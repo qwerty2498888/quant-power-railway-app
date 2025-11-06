@@ -3,7 +3,7 @@ import dash
 from dash import dcc, html, Input, Output, State, dash_table
 import plotly.graph_objs as go
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import timedelta
 from flask_caching import Cache
 from urllib.parse import parse_qs
 import os
@@ -210,14 +210,14 @@ def get_yfinance_options(ticker, expiration):
 def get_yfinance_spot_price(ticker):
     """Кешированная функция для получения текущей цены из yfinance"""
     try:
-        # Специальная обработка для SPX - используем XSP * 10
+        stock = yf.Ticker(ticker)
         if ticker == "^SPX":
             xsp_ticker = yf.Ticker("^XSP")
             if xsp_ticker.history(period="1d").shape[0] > 0:
                 xsp_price = xsp_ticker.history(period="1d")['Close'].iloc[-1]
                 return xsp_price * 10  # Умножаем цену XSP на 10
 
-        # Стандартная логика для других тикеров
+            # Стандартная логика для других тикеров
         stock = yf.Ticker(ticker)
         if stock.history(period="1d").shape[0] > 0:
             return stock.history(period="1d")['Close'].iloc[-1]
@@ -621,11 +621,11 @@ options_summary_page = html.Div(
 how_to_use_gex_page = html.Div(
     className='how-to-use-gex-page',
     children=[
-        html.H1("Как использовать GEX", style={'textAlign': 'center', 'color': 'white'}),
+        html.H1("How To Use GEX", style={'textAlign': 'center', 'color': 'white'}),
 
         # Video links section with buttons
         html.Div([
-            html.H2("Видео уроки", style={'color': '#00ffcc', 'textAlign': 'center', 'margin-bottom': '30px'}),
+            html.H2("Video Tutorials", style={'color': '#00ffcc', 'textAlign': 'center', 'margin-bottom': '30px'}),
 
             # Button container
             html.Div([
@@ -640,14 +640,14 @@ how_to_use_gex_page = html.Div(
                                 'vertical-align': 'middle'
                             }
                         ),
-                        html.Span("Сигнал Long/Short")
+                        html.Span("Long/Short Signals")
                     ],
                         style={
                             'display': 'flex',
                             'align-items': 'center',
                             'justify-content': 'center'
                         }),
-                    href="https://www.youtube.com/embed/leCrLFoL51Y",
+                    href="https://youtu.be/WsKWDGZDT3Q",
                     target="_blank",
                     style={
                         'display': 'block',
@@ -678,14 +678,14 @@ how_to_use_gex_page = html.Div(
                                 'vertical-align': 'middle'
                             }
                         ),
-                        html.Span("Сигнал на пробой")
+                        html.Span("Breakout Signals")
                     ],
                         style={
                             'display': 'flex',
                             'align-items': 'center',
                             'justify-content': 'center'
                         }),
-                    href="https://www.youtube.com/embed/bgunK-z1gD0",
+                    href="https://youtu.be/GNpU7PbjE1A",
                     target="_blank",
                     style={
                         'display': 'block',
@@ -716,14 +716,14 @@ how_to_use_gex_page = html.Div(
                                 'vertical-align': 'middle'
                             }
                         ),
-                        html.Span("Сигнал на разворот")
+                        html.Span("Support/Resistance Levels")
                     ],
                         style={
                             'display': 'flex',
                             'align-items': 'center',
                             'justify-content': 'center'
                         }),
-                    href="https://youtu.be/lNqgdUkt2JA",
+                    href="https://youtu.be/uThgJ_QMiNU",
                     target="_blank",
                     style={
                         'display': 'block',
@@ -754,14 +754,14 @@ how_to_use_gex_page = html.Div(
                                 'vertical-align': 'middle'
                             }
                         ),
-                        html.Span("Торговля в диапазоне")
+                        html.Span("neutral strategies")
                     ],
                         style={
                             'display': 'flex',
                             'align-items': 'center',
                             'justify-content': 'center'
                         }),
-                    href="https://youtu.be/5HnsaO0U2cc",
+                    href="https://youtu.be/lmvKwZ6NlmE",
                     target="_blank",
                     style={
                         'display': 'block',
@@ -798,9 +798,9 @@ how_to_use_gex_page = html.Div(
         html.Div([
             html.H2("Gamma Exposure (GEX)", style={'color': '#00ffcc'}),
             html.P(
-                "Gamma Exposure (GEX) измеряет, насколько маркет-мейкерам необходимо хеджировать свои позиции по опционам. Положительный GEX означает, что маркет-мейкеры придерживаются длинных позиций по гамме и стремятся стабилизировать рынок, покупая на падениях и продавая на подъеме. Отрицательный GEX означает, что у них короткая гамма и они могут усугубить движение рынка."),
+                "Gamma Exposure (GEX) measures how much market makers need to hedge their options positions. Positive GEX means market makers are long gamma and act as market stabilizers (buying dips and selling rallies). Negative GEX means they're short gamma and may amplify market moves."),
 
-            html.H3("Ключевые понятия:", style={'color': '#00ffcc'}),
+            html.H3("Key Concepts:", style={'color': '#00ffcc'}),
             html.Ul([
                 html.Li(html.Strong("Positive GEX:"), " Market makers are stabilizing forces (buy low, sell high)"),
                 html.Li(html.Strong("Negative GEX:"), " Market makers amplify moves (buy high, sell low)"),
@@ -810,73 +810,73 @@ how_to_use_gex_page = html.Div(
                 html.Li(html.Strong("AG (Absolute Gamma):"), " Total gamma regardless of direction (shows key levels)")
             ], style={'color': 'white'}),
 
-            html.H2("Базовые рекомендации", style={'color': '#00ffcc'}),
+            html.H2("Basic Guidelines", style={'color': '#00ffcc'}),
 
             html.H3("1. Positive GEX", style={'color': '#ab47bc'}),
-            html.P("Когда GEX сильно позитивен:"),
+            html.P("When GEX is strongly positive:"),
             html.Ul([
-                html.Li("Ожидается выкуп просадок и продажи у сопротивлений"),
-                html.Li("Ищите поддержку на AG, High Put Volume, High Put OI strikes"),
+                html.Li("Expect dip buying and selling at resistance levels"),
+                html.Li("Look for support at AG, High Put Volume, High Put OI strikes"),
                 html.Li(
-                    "Сопртивлением часто выступает Max Positive GEX, High Call Volume strikes, High Call OI strikes"),
-                html.Li("VWAP имеет тенденцию выступать в качестве сильной поддержки / сопротивления")
+                    "Resistance often forms at Max Positive GEX, High Call Volume strikes, High Call OI strikes"),
+                html.Li("VWAP tends to act as strong support/resistance")
             ], style={'color': 'white'}),
 
             html.H3("2. Negative GEX", style={'color': '#ab47bc'}),
-            html.P("Когда GEX сильно негативен:"),
+            html.P("When GEX is strongly negative:"),
             html.Ul([
-                html.Li("Ожидайте движений, следующих за трендом (momentum)"),
-                html.Li("Прорывы вниз, скорее всего, продолжатся"),
-                html.Li("Следите за усиливающимися действиями дилеров по хеджированию"),
-                html.Li("Следите за VIX. Уход выше 30 может свидетельствовать о панике")
+                html.Li("Expect trend-following momentum moves"),
+                html.Li("Breakdowns are more likely to continue"),
+                html.Li("Watch for accelerating dealer hedging activity"),
+                html.Li("Monitor VIX. A spike above 30 may indicate panic")
             ], style={'color': 'white'}),
 
             html.H3("3. GEX Flip Zones", style={'color': '#ab47bc'}),
-            html.P("Это критические уровни, на которых гамма меняет значения:"),
+            html.P("These are critical levels where gamma flips:"),
             html.Ul([
-                html.Li("Этот уровень всегда является мощной поддержкой / сопротивлением"),
+                html.Li("These levels always act as strong support/resistance"),
                 html.Li(
-                    "Если происходит пробой, то в основном он не будет ложным и движение может ускориться в направлении пробоя"),
+                    "Breakouts through these levels tend to be real and may accelerate in the breakout direction"),
             ], style={'color': 'white'}),
 
-            html.H2("Практические советы по торговле", style={'color': '#00ffcc'}),
+            html.H2("Practical Trading Tips", style={'color': '#00ffcc'}),
             html.Ol([
-                html.Li("Сочетайте GEX с VWAP - лонги от VWAP в позитивной среде GEX имеют высокую вероятность"),
+                html.Li("Combine GEX with VWAP - longs from VWAP in positive GEX environments have high probability"),
                 html.Li(
-                    "Следите за сочетанием уровней - когда несколько индикаторов указывают на один и тот же уровень (GEX + OI + объем + AG), это усиливает его, делая либо магнитом, либо мощной поддержкой / сопротивлением"),
+                    "Watch for confluence - when multiple indicators point to the same level (GEX + OI + volume + AG), it strengthens its role as either a magnet or strong support/resistance"),
                 html.Li(
-                    "При положительном GEX старайтесь продавать на подъеме у сопротивления, покупать на падении у поддержки"),
+                    "In positive GEX, sell rallies at resistance and buy dips at support"),
                 html.Li(
-                    "При отрицательном GEX работайте в направлении нисходящего импульса, но будьте готовы к быстрому выходу"),
-                html.Li("Следите за изменениями GEX в течение дня, особенно вокруг ключевых технических уровней")
+                    "In negative GEX, trade with the downside momentum but be ready to exit quickly"),
+                html.Li("Monitor GEX changes intraday, especially around key technical levels")
             ], style={'color': 'white'}),
 
-            html.H2("Распространенные ошибки", style={'color': '#00ffcc'}),
+            html.H2("Common Mistakes", style={'color': '#00ffcc'}),
             html.Ul([
                 html.Li(
-                    "Торговля против гаммы (например, покупка при отрицательном GEX). Тут, для лонгов, нужно дожидаться окончания снижения и минимум возврат цены выше VWAP. Помните: при отрицательном GEX маркет-мейкеры продают в падающий рынок и если паника усиливается, то даже крепкие поддержки (High Put Vol, High AG и т.д) могут не удержать цену"),
-                html.Li("Игнорирование G-Flip zone, когда она совпадает с техническими уровнями"),
+                    "Fading gamma (e.g., buying during negative GEX). For longs, wait for selling to exhaust and price to reclaim VWAP. Remember: in negative GEX, market makers sell into weakness and even strong supports (High Put Vol, High AG etc.) may fail during panic"),
+                html.Li("Ignoring G-Flip zones when they align with technical levels"),
                 html.Li(
-                    "Игнорирование внешнего фона / фундаментала / ключевых событий (Даже если цена находится в положительном GEX в начале / середине дня, это не означает, что к концу дня не может поступить негативный фундаментальный / новостной триггер)"),
+                    "Ignoring macro/fundamental context (Even if price is in positive GEX early/mid-day, negative fundamental triggers can still emerge)"),
                 html.Li(
-                    "Игнорирование прочего фундаментального / технического анализа. Например, если падение идет несколько дней, а цена находится в глубоких отрицательных значениях GEX - это не повод шортить на всё, т.к. критическая перепроданность RSI или S5FI и т.д. могут остановить от дальнейшего падения")
+                    "Ignoring other technical analysis. For example, after multi-day declines with extreme negative GEX, avoid blind shorting as oversold conditions (RSI, S5FI etc.) may halt further downside")
             ], style={'color': 'white'}),
 
             html.Div([
-                html.H3("Пример простой сделки", style={'color': '#00ffcc'}),
+                html.H3("Example Trade Setup", style={'color': '#00ffcc'}),
                 html.P(
-                    "Сценарий: SPX в сильной положительной среде GEX: Лонг от VWAP, либо от поддержки на уровне max AG:"),
+                    "Scenario: SPX in strong positive GEX environment: Long from VWAP or AG support level:"),
                 html.Ul([
-                    html.Li("Вход: Покупка на уровне VWAP или поддержки AG"),
-                    html.Li("Стоп: Ниже ближайшего кластера Put OI, либо кластера Put Vol"),
-                    html.Li("Цель: Следующий уровень сопротивления"),
+                    html.Li("Entry: Buy at VWAP or AG support level"),
+                    html.Li("Stop: Below nearest Put OI cluster or Put Vol cluster"),
+                    html.Li("Target: Next resistance level"),
                     html.Li(
-                        "Управление: Масштабирование (сокращение) позиции по мере приближения цены к уровню сопротивления")
+                        "Management: Scale out as price approaches resistance")
                 ], style={'color': 'white'})
             ], style={'margin-top': '20px', 'padding': '15px', 'background-color': '#252525', 'border-radius': '10px'}),
 
             html.Div([
-                html.H3("Ключевые показатели, за которыми следует следить", style={'color': '#00ffcc'}),
+                html.H3("Key Metrics to Monitor", style={'color': '#00ffcc'}),
                 html.Table([
                     html.Tr([
                         html.Th("Indicator", style={'text-align': 'left'}),
@@ -885,40 +885,40 @@ how_to_use_gex_page = html.Div(
                     ]),
                     html.Tr([
                         html.Td("Net GEX"),
-                        html.Td("Преобладают положительные значения"),
-                        html.Td("Преобладают отрицательные значения")
+                        html.Td("Predominantly positive values"),
+                        html.Td("Predominantly negative values")
                     ]),
                     html.Tr([
                         html.Td("AG"),
-                        html.Td("Преобладает выше цены"),
-                        html.Td("Преобладает ниже цены")
+                        html.Td("Mostly above price"),
+                        html.Td("Mostly below price")
                     ]),
                     html.Tr([
                         html.Td("P/C Ratio"),
-                        html.Td("Ниже 0.8"),
-                        html.Td("Выше 1.2")
+                        html.Td("Below 0.8"),
+                        html.Td("Above 1.2")
                     ]),
                     html.Tr([
                         html.Td("Call Volume"),
-                        html.Td("Call Vol больше Put Vol"),
-                        html.Td("Call Vol меньше Put Vol")
+                        html.Td("Call Vol > Put Vol"),
+                        html.Td("Call Vol < Put Vol")
                     ]),
                     html.Tr([
                         html.Td("Put Volume"),
-                        html.Td("Put Vol меньше Call Vol"),
-                        html.Td("Put Vol больше Call Vol")
+                        html.Td("Put Vol < Call Vol"),
+                        html.Td("Put Vol > Call Vol")
                     ])
                 ], style={'width': '100%', 'border-collapse': 'collapse', 'margin-top': '15px'})
             ], style={'margin-top': '30px'}),
 
             html.Div([
-                html.H3("Помните:", style={'color': '#00ffcc'}),
-                html.P("GEX - это всего лишь один из инструментов в вашем арсенале. Всегда сочетайте его с:"),
+                html.H3("Remember:", style={'color': '#00ffcc'}),
+                html.P("GEX is just one tool in your arsenal. Always combine it with:"),
                 html.Ul([
-                    html.Li("Анализом динамики цен"),
-                    html.Li("Профилем объемов"),
-                    html.Li("Рыночным контекстом"),
-                    html.Li("Управлением рисками")
+                    html.Li("Price action analysis"),
+                    html.Li("Volume profile"),
+                    html.Li("Market context"),
+                    html.Li("Risk management")
                 ], style={'color': 'white'})
             ], style={'margin-top': '30px', 'padding': '15px', 'background-color': '#252525', 'border-radius': '10px'})
         ], style={
@@ -927,7 +927,7 @@ how_to_use_gex_page = html.Div(
             'padding': '20px',
             'color': 'white',
             'line-height': '1.6'
-        })
+        }),
     ],
     style={
         'margin-left': '10%',
@@ -944,32 +944,30 @@ disclaimer_page = html.Div(
 
         html.Div([
             dcc.Markdown('''
-            #### Информация на Max Power, содержащаяся на этом и/или связанных с ним веб-продуктах, не является индивидуальной рекомендацией, и носит исключительно информационный характер и не должна рассматриваться как предложение, либо рекомендация к инвестированию, покупке, продаже какого-либо актива, торговых операций по финансовым инструментам.
-            #### Администрация Проекта оставляет за собой право изменять и обновлять содержание материалов информационного ресурса и других документов, не уведомляя об этом пользователей.
+            #### Information on Quant Power, contained on this and/or related web products, does not constitute individual investment advice. It is provided solely for informational purposes and should not be considered as an offer or recommendation to invest, buy, or sell any asset or financial instrument.
+            #### The Project Administration reserves the right to modify and update the content of this information resource and other documents without notifying users.
 
 
-            ### 1. Никаких рекомендаций по инвестированию
-            Контент на этой платформе не предназначен и не является финансовым советом, инвестиционным советом, торговым советом или каким-либо другим советом. Предоставленная информация не должна использоваться в качестве единственной основы для принятия инвестиционных решений.
+            ### 1. No Investment Recommendations
+            Content on this platform is not intended to be and does not constitute financial advice, investment advice, trading advice, or any other advice. The provided information should not be used as the sole basis for making investment decisions.
 
-            ### 2. Информация о рисках
-            Торговля и инвестирование сопряжены со значительным риском потерь и подходят не каждому инвестору. Вам следует тщательно взвесить свои инвестиционные цели, уровень опыта и склонность к риску, прежде чем принимать какие-либо инвестиционные решения.
+            ### 2. Risk Disclosure
+            Trading and investing involve substantial risk of loss and are not suitable for every investor. You should carefully consider your investment objectives, level of experience, and risk appetite before making any investment decisions.
 
-            ### 3. Отсутствие гарантий
-            Мы не гарантируем эффективность или применимость каких-либо стратегий или предоставленной информации. Прошлые результаты не являются показателем будущих результатов.
+            ### 3. No Guarantees
+            We do not guarantee the effectiveness or applicability of any strategies or information provided. Past performance is not indicative of future results.
 
-            ### 4. Сторонний контент
-            Наша платформа содержит ссылки на сторонние веб-сайты или контент. Мы не подтверждаем и не несем ответственности за точность таких материалов третьих лиц.
+            ### 4. Third-Party Content
+            Our platform may contain links to third-party websites or content. We do not endorse and are not responsible for the accuracy of such third-party materials.
 
-            ### 5. Ограничение ответственности
-            Max Power не несет ответственности за какие-либо прямые, косвенные, опосредованные или случайные убытки, возникающие в результате или в связи с использованием вами этой платформы.
+            ### 5. Limitation of Liability
+            Quant Power shall not be liable for any direct, indirect, incidental, or consequential damages arising from or related to your use of this platform.
 
-            ### 6. Точность данных
-            Хотя мы стремимся предоставлять точные рыночные данные, мы не можем гарантировать точность информации, полученной из сторонних источников, таких как Yahoo Finance и т.д..
+            ### 6. Data Accuracy
+            While we strive to provide accurate market data, we cannot guarantee the precision of information obtained from third-party sources such as Yahoo Finance, etc.
 
-            ### 7. Только для информационных целей
-            Данная платформа предназначена исключительно для информационных целей и не должна рассматриваться как рекомендация к покупке или продаже какого-либо финансового инструмента. Используя эту платформу, вы подтверждаете, что прочитали, поняли и соглашаетесь соблюдать настоящий отказ от ответственности.
-
-            Используя эту платформу, вы подтверждаете, что прочитали, поняли и соглашаетесь соблюдать настоящий отказ от ответственности.
+            ### 7. For Informational Purposes Only
+            This platform is intended solely for informational purposes and should not be construed as a recommendation to buy or sell any financial instrument. By using this platform, you acknowledge that you have read, understood, and agree to comply with this disclaimer.
             ''',
                          style={
                              'color': 'white',
@@ -992,8 +990,7 @@ disclaimer_page = html.Div(
         'color': 'white'
     }
 )
-
-
+# Функция для получения исторических данных для ценовых графиков
 def get_historical_data_for_chart(ticker):
     """Получает исторические данные с учетом замены SPX на XSP*10"""
     if ticker == "^SPX":
@@ -1056,7 +1053,7 @@ app.layout = html.Div([
             # Логотип и заголовок
             html.Div([
 
-                html.H1("MAX POWER", style={
+                html.H1("QUANT POWER", style={
                     'color': 'transparent',
                         'background': 'linear-gradient(90deg, #00ffcc, #008cff)',
                         '-webkit-background-clip': 'text',
@@ -1068,7 +1065,7 @@ app.layout = html.Div([
                         'display': 'block',
                         'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'
                 }),
-                html.P("Исключительная информация для исключительных людей", style={
+                html.P("Exclusive information for exceptional people", style={
                     'color': 'rgba(255,255,255,0.8)',
                     'text-align': 'center',
                     'margin-bottom': '40px',
@@ -1078,7 +1075,7 @@ app.layout = html.Div([
 
             # Форма входа
             html.Div([
-                html.Label("Введите ваш Telegram username или ID:", style={
+                html.Label("Enter your login:", style={
                     'color': 'white',
                     'font-size': '16px',
                     'margin-bottom': '10px',
@@ -1087,7 +1084,7 @@ app.layout = html.Div([
                 dcc.Input(
                     id='username-input',
                     type='text',
-                    placeholder='@username или ваш ID',
+                    placeholder='login',
                     className='dash-input',
                     style={
                         'width': '92.5%',
@@ -1102,7 +1099,7 @@ app.layout = html.Div([
                     }
                 ),
                 html.Button(
-                    'ПРОВЕРИТЬ ДОСТУП',
+                    'CHECK ACCESS',
                     id='submit-button',
                     n_clicks=0,
                     className='dash-button',
@@ -1137,13 +1134,13 @@ app.layout = html.Div([
                                 src='https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg',
                                 style={'height': '24px', 'margin-right': '10px'}
                             ),
-                            "Получить доступ"
+                            "Get access"
                         ], style={
                             'display': 'flex',
                             'align-items': 'center',
                             'justify-content': 'center'
                         }),
-                        href="https://t.me/+M4gBrEs7gfxjMTFi",
+                        href="https://t.me/+ccPkiwklte01MDNi",
                         target="_blank",
                         style={
                             'display': 'block',
@@ -1189,7 +1186,7 @@ app.layout = html.Div([
                                 src='https://i.postimg.cc/3JpcHcJC/stock-market.png',
                                 style={'height': '60px', 'margin-bottom': '15px'}
                             ),
-                            html.H3("Ключевые уровни", style={'color': 'transparent',
+                            html.H3("Key Levels", style={'color': 'transparent',
                         'background': 'linear-gradient(90deg, #00ffcc, #008cff)',
                         '-webkit-background-clip': 'text',
                         'text-align': 'center',
@@ -1199,7 +1196,7 @@ app.layout = html.Div([
                         'text-decoration': 'none',
                         'display': 'block',
                         'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
-                            html.P("Определение ключевых уровней поддержки и сопротивления на основе профиля GEX",
+                            html.P("Identification of key support and resistance levels based on GEX profile",
                                    style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
                         ], style={
                             'padding': '20px',
@@ -1222,7 +1219,7 @@ app.layout = html.Div([
                                 src='https://i.postimg.cc/j2sNDCYh/pie-chart.png',
                                 style={'height': '60px', 'margin-bottom': '15px'}
                             ),
-                            html.H3("Гамма-анализ", style={'color': 'transparent',
+                            html.H3("Gamma Analysis", style={'color': 'transparent',
                         'background': 'linear-gradient(90deg, #008cff, #00ffcc)',
                         '-webkit-background-clip': 'text',
                         'text-align': 'center',
@@ -1232,7 +1229,7 @@ app.layout = html.Div([
                         'text-decoration': 'none',
                         'display': 'block',
                         'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
-                            html.P("Детальный анализ гамма-экспозиции для понимания действий маркет-мейкеров",
+                            html.P("Detailed analysis of gamma exposure to understand market makers' actions",
                                    style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
                         ], style={
                             'padding': '20px',
@@ -1251,7 +1248,7 @@ app.layout = html.Div([
                                 src='https://i.postimg.cc/Xvw5j9BP/1.png',
                                 style={'height': '60px', 'margin-bottom': '15px'}
                             ),
-                            html.H3("Объемы и OI", style={'color': 'transparent',
+                            html.H3("Volume & OI", style={'color': 'transparent',
                         'background': 'linear-gradient(90deg, #00ffcc, #008cff)',
                         '-webkit-background-clip': 'text',
                         'text-align': 'center',
@@ -1261,7 +1258,7 @@ app.layout = html.Div([
                         'text-decoration': 'none',
                         'display': 'block',
                         'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
-                            html.P("Анализ открытого интереса и объемов для определения ключевых уровней",
+                            html.P("Analysis of open interest and volume to identify key levels",
                                    style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
                         ], style={
                             'padding': '20px',
@@ -1280,7 +1277,7 @@ app.layout = html.Div([
                                 src='https://i.postimg.cc/tCNWG3Pm/magnet.png',
                                 style={'height': '60px', 'margin-bottom': '15px'}
                             ),
-                            html.H3("Max Power", style={'color': 'transparent',
+                            html.H3("Quant Power", style={'color': 'transparent',
                         'background': 'linear-gradient(90deg, #008cff, #00ffcc)',
                         '-webkit-background-clip': 'text',
                         'text-align': 'center',
@@ -1290,7 +1287,7 @@ app.layout = html.Div([
                         'text-decoration': 'none',
                         'display': 'block',
                         'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
-                            html.P("Уникальная разработка, определяющая уровень магнит, который притягивает к себе цену",
+                            html.P("Unique development that identifies the magnet level that attracts price",
                                    style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
                         ], style={
                             'padding': '20px',
@@ -1318,7 +1315,7 @@ app.layout = html.Div([
                         'text-decoration': 'none',
                         'display': 'block',
                         'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
-                            html.P("Уникальная разработка, определяющая диапазон, внутри которого будет двигаться цена",
+                            html.P("Unique development that identifies the range within which price will move",
                                    style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
                         ], style={
                             'padding': '20px',
@@ -1335,7 +1332,7 @@ app.layout = html.Div([
                                 src='https://i.postimg.cc/KcR9Pr4T/cctv-camera.png',
                                 style={'height': '60px', 'margin-bottom': '15px'}
                             ),
-                            html.H3("Мониторинг", style={'color': 'transparent',
+                            html.H3("Monitoring", style={'color': 'transparent',
                         'background': 'linear-gradient(90deg, #00ffcc, #008cff)',
                         '-webkit-background-clip': 'text',
                         'text-align': 'center',
@@ -1345,7 +1342,7 @@ app.layout = html.Div([
                         'text-decoration': 'none',
                         'display': 'block',
                         'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
-                            html.P("Отслеживание изменений в реальном времени",
+                            html.P("Real-time tracking of changes",
                                    style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
                         ], style={
                             'padding': '20px',
@@ -1363,7 +1360,7 @@ app.layout = html.Div([
                                 src='https://i.postimg.cc/Px0ppkHX/sand-clock.png',
                                 style={'height': '60px', 'margin-bottom': '15px'}
                             ),
-                            html.H3("Время - деньги", style={'color': 'transparent',
+                            html.H3("Time is Money", style={'color': 'transparent',
                         'background': 'linear-gradient(90deg, #008cff, #00ffcc)',
                         '-webkit-background-clip': 'text',
                         'text-align': 'center',
@@ -1373,7 +1370,7 @@ app.layout = html.Div([
                         'text-decoration': 'none',
                         'display': 'block',
                         'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
-                            html.P("Все необходимое в одном месте. Удели время торговле, а не поиску информации",
+                            html.P("Everything you need in one place. Spend time trading, not searching for information",
                                    style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
                         ], style={
                             'padding': '20px',
@@ -1391,7 +1388,7 @@ app.layout = html.Div([
                                 src='https://i.postimg.cc/zGMNKwvj/transparency.png',
                                 style={'height': '60px', 'margin-bottom': '15px'}
                             ),
-                            html.H3("Простота", style={'color': 'transparent',
+                            html.H3("Simplicity", style={'color': 'transparent',
                         'background': 'linear-gradient(90deg, #00ffcc, #008cff)',
                         '-webkit-background-clip': 'text',
                         'text-align': 'center',
@@ -1401,7 +1398,7 @@ app.layout = html.Div([
                         'text-decoration': 'none',
                         'display': 'block',
                         'text-shadow': '0 2px 10px rgba(0, 255, 204, 0.3)'}),
-                            html.P("Продуманная визуализация позволяет оценить рынок за пару мгновений",
+                            html.P("Thoughtful visualization allows you to assess the market in moments",
                                    style={'color': 'rgba(255,255,255,0.7)', 'font-size': '14px'})
                         ], style={
                             'padding': '20px',
@@ -1424,13 +1421,13 @@ app.layout = html.Div([
 
             # Футер
             html.Div([
-                html.P("© 2020 Max Power. Все права защищены.", style={
+                html.P("© 2020 Quant Power. All rights reserved.", style={
                     'color': 'rgba(255,255,255,0.5)',
                     'text-align': 'center',
                     'margin-top': '60px',
                     'font-size': '14px'
                 }),
-                html.P("Disclaimer: Информация предоставляется исключительно в образовательных целях.", style={
+                html.P("Disclaimer: Information is provided for educational purposes only.", style={
                     'color': 'rgba(255,255,255,0.3)',
                     'text-align': 'center',
                     'margin-top': '10px',
@@ -1457,7 +1454,7 @@ app.layout = html.Div([
         html.Div([
             html.Div([
                 dcc.Link(
-                    html.H2("Max Power", style={'color': 'white', 'cursor': 'pointer'}),
+                    html.H2("Quant Power", style={'color': 'white', 'cursor': 'pointer'}),
                     href="/",
                     style={'text-decoration': 'none'}
                 ),
@@ -1504,21 +1501,21 @@ app.layout = html.Div([
 
 # Лейаут для главной страницы
 index_page = html.Div([
-    html.H1("Max Power", style={'textAlign': 'center'}),
+    html.H1("Quant Power", style={'textAlign': 'center'}),
 
     html.Div([
         html.Label(""),
         dcc.Input(id='ticker-input', type='text', value='SPX', className='dash-input'),
-        html.Button('Поиск', id='search-button', n_clicks=0, className='dash-button', style={'margin-left': '10px'}),
+        html.Button('Search', id='search-button', n_clicks=0, className='dash-button', style={'margin-left': '10px'}),
     ], className='dash-container', style={'display': 'flex', 'align-items': 'center'}),
 
     html.Div([
-        html.Label("Выберите даты экспирации:"),
+        html.Label("Expiration:"),
         dcc.Dropdown(id='date-dropdown', multi=True, className='dash-dropdown'),
     ], className='dash-container'),
 
     html.Div([
-        html.Label("Выберите параметры:"),
+        html.Label("Parameters:"),
         html.Div([
             html.Button("Net GEX", id="btn-net-gex", className="parameter-button"),
             html.Button("AG", id="btn-ag", className="parameter-button"),
@@ -1587,7 +1584,7 @@ key_levels_page = html.Div(
         html.Div([
             html.Label("", style={'color': 'white'}),
             dcc.Input(id='ticker-input-key-levels', type='text', value='SPX', className='dash-input'),
-            html.Button('Поиск', id='search-button-key-levels', n_clicks=0, className='dash-button',
+            html.Button('Search', id='search-button-key-levels', n_clicks=0, className='dash-button',
                         style={'margin-left': '10px'}),
         ], className='dash-container', style={'display': 'flex', 'align-items': 'center'}),
 
@@ -1623,6 +1620,7 @@ key_levels_page = html.Div(
 )
 
 
+# Добавляем новый callback для прогноза
 # Добавляем новый callback для прогноза
 @app.callback(
     Output('forecast-text', 'children'),
@@ -1679,7 +1677,7 @@ def update_forecast(n_clicks, n_submit, ticker):
         return html.Div("Нет данных по опционам для анализа", style={'color': 'white'})
 
     # Рассчитываем технические уровни
-    price_range = 0.02 if ticker in ["^SPX", "^NDX", "^RUT", "^DJI", "^XSP"] else 0.05
+    price_range = 0.02 if ticker in ["^SPX", "^NDX", "^RUT", "^DJI"] else 0.05
     lower_limit = current_price * (1 - price_range)
     upper_limit = current_price * (1 + price_range)
     filtered_data = options_data[(options_data['strike'] >= lower_limit) & (options_data['strike'] <= upper_limit)]
@@ -1784,14 +1782,14 @@ def update_forecast(n_clicks, n_submit, ticker):
     forecast = []
 
     # 1. Основные данные (обновленный заголовок)
-    forecast.append(html.H4(f"📊 Расширенный анализ опционного рынка: {ticker}",
+    forecast.append(html.H4(f"📊 Advanced Options Market Analysis: {ticker}",
                             style={'color': '#00ffcc', 'text-align': 'left', 'margin-bottom': '15px'}))
 
     # Информационная панель
     info_panel = [
         html.Div([
             html.Div([
-                html.P("Текущая цена:", style={'color': 'white'}),
+                html.P("Price:", style={'color': 'white'}),
                 html.P(f"{current_price:.2f}", style={'color': 'white', 'font-weight': 'bold'})
             ], style={'display': 'flex', 'justify-content': 'space-between'}),
 
@@ -1799,6 +1797,7 @@ def update_forecast(n_clicks, n_submit, ticker):
                 html.P("VWAP:", style={'color': 'white'}),
                 html.P(f"{vwap:.2f}", style={'color': 'white', 'font-weight': 'bold'})
             ], style={'display': 'flex', 'justify-content': 'space-between'}),
+
 
             html.Div([
                 html.P("RSI (14):", style={'color': 'white'}),
@@ -1834,11 +1833,11 @@ def update_forecast(n_clicks, n_submit, ticker):
     market_context = []
     if bullish_background:
         market_context.append(html.Div([
-            html.H4("📈 СИЛЬНЫЙ БЫЧИЙ ФОН",
+            html.H4("📈 STRONG BULLISH",
                     style={'color': 'lightgreen', 'text-align': 'center', 'margin-bottom': '10px'}),
-            html.P("🔹 Цена окружена положительными значениями GEX", style={'color': 'lightgreen'}),
-            html.P("🔹 Маркет-мейкеры выступают стабилизаторами рынка", style={'color': 'lightgreen'}),
-            html.P("🔹 Коррекции вероятно будут ограниченными", style={'color': 'lightgreen'})
+            html.P("🔹 The price is in positive GEX", style={'color': 'lightgreen'}),
+            html.P("🔹 Market makers act as market stabilizers", style={'color': 'lightgreen'}),
+            html.P("🔹 Corrections are likely to be limited", style={'color': 'lightgreen'})
         ], style={
             'background-color': 'rgba(0, 255, 0, 0.1)',
             'padding': '15px',
@@ -1848,11 +1847,11 @@ def update_forecast(n_clicks, n_submit, ticker):
         }))
     elif bearish_background:
         market_context.append(html.Div([
-            html.H4("📉 СИЛЬНЫЙ МЕДВЕЖИЙ ФОН",
+            html.H4("📉 STRONG BEARISH",
                     style={'color': 'salmon', 'text-align': 'center', 'margin-bottom': '10px'}),
-            html.P("🔹 Цена окружена отрицательными значениями GEX", style={'color': 'salmon'}),
-            html.P("🔹 Маркет-мейкеры усиливают волатильность", style={'color': 'salmon'}),
-            html.P("🔹 Вероятны резкие движения и проскальзывания", style={'color': 'salmon'})
+            html.P("🔹 The price is in negative GEX", style={'color': 'salmon'}),
+            html.P("🔹 Market makers increase volatility", style={'color': 'salmon'}),
+            html.P("🔹 Sudden movements are likely", style={'color': 'salmon'})
         ], style={
             'background-color': 'rgba(255, 0, 0, 0.1)',
             'padding': '15px',
@@ -1862,11 +1861,11 @@ def update_forecast(n_clicks, n_submit, ticker):
         }))
     else:
         market_context.append(html.Div([
-            html.H4("🔄 НЕЙТРАЛЬНЫЙ/КОНСОЛИДАЦИОННЫЙ СЦЕНАРИЙ",
+            html.H4("🔄 NEUTRAL/CONSOLIDATION SCENARIO",
                     style={'color': 'yellow', 'text-align': 'center', 'margin-bottom': '10px'}),
-            html.P("🔹 GEX не показывает четкого направления", style={'color': 'yellow'}),
-            html.P("🔹 Вероятна торговля в диапазоне", style={'color': 'yellow'}),
-            html.P("🔹 Ищите пробои с подтверждением объема", style={'color': 'yellow'})
+            html.P("🔹 GEX doesn't show a clear direction", style={'color': 'yellow'}),
+            html.P("🔹 Trading in the range is likely", style={'color': 'yellow'}),
+            html.P("🔹 Look for a breakdown with volume confirmation", style={'color': 'yellow'})
         ], style={
             'background-color': 'rgba(255, 255, 0, 0.1)',
             'padding': '15px',
@@ -1886,23 +1885,23 @@ def update_forecast(n_clicks, n_submit, ticker):
 
     # Уровни поддержки
     if max_put_vol_strike < current_price:
-        support_levels.append(('Объем путов', max_put_vol_strike))
+        support_levels.append(('Put Volume', max_put_vol_strike))
     if max_neg_gex_strike < current_price:
-        support_levels.append(('Отриц. GEX', max_neg_gex_strike))
+        support_levels.append(('negative GEX', max_neg_gex_strike))
     if max_ag_strike < current_price:
         support_levels.append(('AG', max_ag_strike))
     if max_put_oi_strike < current_price:
-        support_levels.append(('OI путов', max_put_oi_strike))
+        support_levels.append(('Put OI', max_put_oi_strike))
 
     # Уровни сопротивления
     if max_call_vol_strike > current_price:
-        resistance_levels.append(('Объем коллов', max_call_vol_strike))
+        resistance_levels.append(('Call Volume', max_call_vol_strike))
     if max_pos_gex_strike > current_price:
-        resistance_levels.append(('Поз. GEX', max_pos_gex_strike))
+        resistance_levels.append(('positive GEX', max_pos_gex_strike))
     if max_ag_strike > current_price:
         resistance_levels.append(('AG', max_ag_strike))
     if max_call_oi_strike > current_price:
-        resistance_levels.append(('OI коллов', max_call_oi_strike))
+        resistance_levels.append(('Call OI', max_call_oi_strike))
 
     # G-Flip зона
     if g_flip_zone:
@@ -1938,32 +1937,32 @@ def update_forecast(n_clicks, n_submit, ticker):
             # Определяем цвет в зависимости от типа уровня
             if level_type == "support":
                 color = '#02d432'  # Зеленый для поддержек
-                prob_text = "отскока"
-                level_name = "поддержка"
+                prob_text = "rebound"
+                level_name = "support"
             else:
                 color = '#f32d35'  # Красный для сопротивлений
-                prob_text = "отбоя"
-                level_name = "сопротивление"
+                prob_text = "stand down"
+                level_name = "resistance"
 
             # Собираем названия параметров
             param_names = [level[0] for level in levels]
 
             # Определяем силу уровня
             if prob > 70:
-                strength = "💪 Сильное"
-                strength_desc = "Высокая вероятность"
+                strength = "💪 Strong"
+                strength_desc = "High probability"
             elif prob > 40:
-                strength = "🆗 Среднее"
-                strength_desc = "Умеренная вероятность"
+                strength = "🆗 Average"
+                strength_desc = "Moderate probability"
             else:
-                strength = "⚠️ Слабое"
-                strength_desc = "Низкая вероятность"
+                strength = "⚠️ Weak"
+                strength_desc = "Low probability"
 
             # Формируем основной текст (убрали факторы)
-            main_text = f"{strength} {level_name} на {price:.2f}: {strength_desc} {prob_text}"
+            main_text = f"{strength} {level_name} на {price:.2f}: {strength_desc} {prob_text} ({prob}%)"
 
             # Формируем список параметров (оставили только подтверждающие параметры)
-            params_text = "Подтверждается: " + ", ".join(param_names)
+            params_text = "Confirmed: " + ", ".join(param_names)
 
             formatted.append(html.Div([
                 html.Div([
@@ -1983,13 +1982,13 @@ def update_forecast(n_clicks, n_submit, ticker):
 
     # Добавляем поддержки
     if support_groups:
-        levels_analysis.append(html.H5("📉 КЛЮЧЕВЫЕ ПОДДЕРЖКИ:",
+        levels_analysis.append(html.H5("📉 KEY SUPPORTS:",
                                        style={'color': 'white', 'margin-top': '20px'}))
         levels_analysis.extend(format_level_groups(support_groups, "support"))
 
     # Добавляем сопротивления
     if resistance_groups:
-        levels_analysis.append(html.H5("📈 КЛЮЧЕВЫЕ СОПРОТИВЛЕНИЯ:",
+        levels_analysis.append(html.H5("📈 KEY RESISTANCES:",
                                        style={'color': 'white', 'margin-top': '20px'}))
         levels_analysis.extend(format_level_groups(resistance_groups, "resistance"))
 
@@ -1997,7 +1996,7 @@ def update_forecast(n_clicks, n_submit, ticker):
 
     # 4. Торговые идеи (обновленная логика)
     trading_ideas = []
-    trading_ideas.append(html.H5("💡 ВАРИАНТЫ:", style={'color': 'white', 'margin-top': '30px'}))
+    trading_ideas.append(html.H5("💡 variants:", style={'color': 'white', 'margin-top': '30px'}))
 
     def generate_trading_idea(price, level_type, prob, confirmations):
         idea = []
@@ -2006,40 +2005,41 @@ def update_forecast(n_clicks, n_submit, ticker):
 
         if prob > 70:  # Сильный уровень - торгуем отскок/отбой
             if level_type == "support":
-                idea.append(html.P(f"{emoji} Длинные позиции на отскоке от поддержки:",
+                idea.append(html.P(f"{emoji} Long positions on the rebound from support:",
                                    style={'color': color, 'font-weight': 'bold'}))
-                idea.append(html.P(f"• Покупайте при отскоке от {price:.2f} с подтверждением",
+                idea.append(html.P(f"• Buy on the rebound from {price:.2f} with confirmation",
                                    style={'color': 'white'}))
             else:
-                idea.append(html.P(f"{emoji} Короткие позиции на отбое от сопротивления:",
+                idea.append(html.P(f"{emoji} Short positions on the rebound from resistance:",
                                    style={'color': color, 'font-weight': 'bold'}))
-                idea.append(html.P(f"• Продавайте при отбое от {price:.2f} с подтверждением",
-                                   style={'color': 'white'}))
+                idea.append(
+                    html.P(f"• sell when you break away from the resistance level {price:.2f} with confirmation",
+                           style={'color': 'white'}))
 
-            idea.append(html.P(f"• Вероятность {'отскока' if level_type == 'support' else 'отбоя'}",
+            idea.append(html.P(f"• Probability of {'rebound' if level_type == 'support' else 'rebound'}: {prob}%",
                                style={'color': color}))
-            idea.append(html.P(f"• Стоп-лосс: {'ниже' if level_type == 'support' else 'выше'} уровня",
+            idea.append(html.P(f"• Stop loss: {'below' if level_type == 'support' else 'higher'} level",
                                style={'color': 'white'}))
-            idea.append(html.P(f"• Цели: ближайшие {'сопротивления' if level_type == 'support' else 'поддержки'}",
+            idea.append(html.P(f"• Targets: the nearest {'resistances' if level_type == 'support' else 'supports'}",
                                style={'color': 'white'}))
         else:  # Слабый уровень - торгуем пробой
             if level_type == "support":
-                idea.append(html.P(f"🔴 Короткие позиции на пробое поддержки:",
+                idea.append(html.P(f"🔴 Short positions at the breakdown of support:",
                                    style={'color': 'salmon', 'font-weight': 'bold'}))
-                idea.append(html.P(f"• Продавайте при пробое {price:.2f} с объемом",
+                idea.append(html.P(f"•Sell at the breakdown {price:.2f} with volumes",
                                    style={'color': 'white'}))
             else:
-                idea.append(html.P(f"🟢 Длинные позиции на пробое сопротивления:",
+                idea.append(html.P(f"🟢 Long positions at the breakdown of resistance:",
                                    style={'color': 'lightgreen', 'font-weight': 'bold'}))
-                idea.append(html.P(f"• Покупайте при пробое {price:.2f} с объемом",
+                idea.append(html.P(f"• Buy at the breakdown {price:.2f} with volumes",
                                    style={'color': 'white'}))
 
-            idea.append(html.P(f"• Вероятность продолжения:",
+            idea.append(html.P(f"• The probability of continuation: {100 - prob}%",
                                style={'color': 'lightgreen' if level_type == 'resistance' else 'salmon'}))
-            idea.append(html.P("• Ищите подтверждение на меньших таймфреймах",
+            idea.append(html.P("• Look for confirmation on smaller timeframes",
                                style={'color': 'white'}))
             idea.append(
-                html.P(f"• Цели: следующие уровни {'поддержки' if level_type == 'support' else 'сопротивления'}",
+                html.P(f"•Targets: next {'support levels' if level_type == 'support' else 'resistance levels'}",
                        style={'color': 'white'}))
 
         return html.Div(idea, style={
@@ -2066,12 +2066,12 @@ def update_forecast(n_clicks, n_submit, ticker):
     # Общие рекомендации для нейтрального рынка
     if not bullish_background and not bearish_background:
         trading_ideas.append(html.Div([
-            html.P("🟡 Торговля в диапазоне:", style={'color': 'yellow', 'font-weight': 'bold'}),
-            html.P("• Покупайте у подтвержденных поддержек, продавайте у подтвержденных сопротивлений",
+            html.P("🟡 Range Trading:", style={'color': 'yellow', 'font-weight': 'bold'}),
+            html.P("• Buy near confirmed support levels, sell near confirmed resistance levels",
                    style={'color': 'white'}),
-            html.P("• Используйте лимитные ордера для входа в зонах уровней", style={'color': 'white'}),
-            html.P("• Уменьшите размер позиции на 30-50% из-за неопределенности", style={'color': 'white'}),
-            html.P("• Ищите ложные пробои для лучших входов", style={'color': 'white'})
+            html.P("• Use limit orders to enter near key levels", style={'color': 'white'}),
+            html.P("• Reduce position size by 30-50% due to uncertainty", style={'color': 'white'}),
+            html.P("• Look for false breakouts for better entries", style={'color': 'white'})
         ], style={
             'background-color': 'rgba(255, 255, 0, 0.1)',
             'padding': '15px',
@@ -2083,28 +2083,28 @@ def update_forecast(n_clicks, n_submit, ticker):
 
     # 5. Управление рисками
     risk_management = []
-    risk_management.append(html.H5("⚠️ УПРАВЛЕНИЕ РИСКАМИ:", style={'color': 'white', 'margin-top': '30px'}))
+    risk_management.append(html.H5("⚠️ RISK MANAGEMENT:", style={'color': 'white', 'margin-top': '30px'}))
 
     risk_management.append(html.Div([
-        html.P("🔹 Размер позиции:", style={'color': 'white', 'font-weight': 'bold'}),
-        html.P("• Рискуйте не более 1-2% капитала на сделку", style={'color': 'white'}),
-        html.P("• Уменьшайте размер в условиях высокой волатильности", style={'color': 'white'}),
+        html.P("🔹 Position Sizing:", style={'color': 'white', 'font-weight': 'bold'}),
+        html.P("• Risk no more than 1-2% of capital per trade", style={'color': 'white'}),
+        html.P("• Reduce position size in high volatility conditions", style={'color': 'white'}),
 
-        html.P("🔹 Стоп-лосс:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
-        html.P(f"• Для длинных позиций: ниже ближайшей поддержки ({min(support_groups.keys()):.2f} при наличии)"
-               if support_groups else "• Для длинных позиций: 1-2% ниже точки входа", style={'color': 'white'}),
+        html.P("🔹 Stop Loss:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
+        html.P(f"• For long positions: below nearest support ({min(support_groups.keys()):.2f} if present)"
+               if support_groups else "• For long positions: 1-2% below entry point", style={'color': 'white'}),
         html.P(
-            f"• Для коротких позиций: выше ближайшего сопротивления ({min(resistance_groups.keys()):.2f} при наличии)"
-            if resistance_groups else "• Для коротких позиций: 1-2% выше точки входа", style={'color': 'white'}),
+            f"• For short positions: above nearest resistance ({min(resistance_groups.keys()):.2f} if present)"
+            if resistance_groups else "• For short positions: 1-2% above entry point", style={'color': 'white'}),
 
-        html.P("🔹 Тейк-профит:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
-        html.P("• Фиксируйте часть прибыли у ключевых уровней", style={'color': 'white'}),
-        html.P("• Используйте трейлинг-стоп после достижения первой цели", style={'color': 'white'}),
+        html.P("🔹 Take Profit:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
+        html.P("• Secure partial profits at key levels", style={'color': 'white'}),
+        html.P("• Use trailing stop after reaching first target", style={'color': 'white'}),
 
-        html.P("🔹 Психология:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
-        html.P("• Избегайте сделок под влиянием эмоций", style={'color': 'white'}),
-        html.P("• Придерживайтесь торгового плана", style={'color': 'white'}),
-        html.P("• Анализируйте каждую сделку", style={'color': 'white'})
+        html.P("🔹 Psychology:", style={'color': 'white', 'font-weight': 'bold', 'margin-top': '10px'}),
+        html.P("• Avoid emotionally-driven trades", style={'color': 'white'}),
+        html.P("• Stick to your trading plan", style={'color': 'white'}),
+        html.P("• Review every trade", style={'color': 'white'})
     ], style={
         'background-color': '#252525',
         'padding': '15px',
@@ -2116,25 +2116,25 @@ def update_forecast(n_clicks, n_submit, ticker):
 
     # 6. Дополнительные инсайты
     insights = []
-    insights.append(html.H5("🔍 ДОПОЛНИТЕЛЬНЫЕ ИНСАЙТЫ:", style={'color': 'white', 'margin-top': '30px'}))
+    insights.append(html.H5("🔍 ADDITIONAL INSIGHTS:", style={'color': 'white', 'margin-top': '30px'}))
 
-    # Анализ RSI
+    # RSI Analysis
     rsi_analysis = ""
     if current_rsi > 70:
-        rsi_analysis = "🔹 RSI указывает на перекупленность - возможна коррекция"
+        rsi_analysis = "🔹 RSI indicates overbought conditions - potential correction"
     elif current_rsi < 30:
-        rsi_analysis = "🔹 RSI указывает на перепроданность - возможен отскок"
+        rsi_analysis = "🔹 RSI indicates oversold conditions - potential bounce"
     else:
-        rsi_analysis = "🔹 RSI в нейтральной зоне - ищите другие подтверждения"
+        rsi_analysis = "🔹 RSI in neutral zone - look for other confirmations"
 
-    # Анализ P/C Ratio
+    # P/C Ratio Analysis
     pc_analysis = ""
     if pc_ratio > 1.3:
-        pc_analysis = "🔹 Высокий P/C Ratio: рынок ожидает снижения"
+        pc_analysis = "🔹 High P/C Ratio: market expects downside"
     elif pc_ratio < 0.7:
-        pc_analysis = "🔹 Низкий P/C Ratio: рынок ожидает роста"
+        pc_analysis = "🔹 Low P/C Ratio: market expects upside"
     else:
-        pc_analysis = "🔹 Нейтральный P/C Ratio: нет четкого сигнала"
+        pc_analysis = "🔹 Neutral P/C Ratio: no clear signal"
 
     insights.append(html.Div([
         html.P(rsi_analysis, style={'color': 'white'}),
@@ -2171,7 +2171,7 @@ def check_username(n_clicks, username, stored_username, auth_status):
 
         if username and username in allowed_users:
             return (
-                "Доступ разрешен.",
+                "Access is opened",
                 {'display': 'block'},
                 {'display': 'none'},
                 username,
@@ -2179,7 +2179,7 @@ def check_username(n_clicks, username, stored_username, auth_status):
             )
         else:
             return (
-                "Доступ запрещен",
+                "Access is closed",
                 {'display': 'none'},
                 {'display': 'block'},
                 None,
@@ -2342,7 +2342,7 @@ def update_options_chart(n_clicks, n_submit, dates, selected_params, ticker):
     # Определяем диапазон в зависимости от VIX (только для SPX)
     if ticker == "^SPX":
         if current_vix < 20:
-            price_range = 0.01  # 0.012%
+            price_range = 0.012  # 0.012%
         elif 20 <= current_vix < 25:
             price_range = 0.016  # 0.016%
         elif 25 <= current_vix < 30:
@@ -2558,7 +2558,7 @@ def update_options_chart(n_clicks, n_submit, dates, selected_params, ticker):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=0.5,
-        text="Max Power",
+        text="Quant Power",
         showarrow=False,
         font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
         textangle=0,
@@ -2607,6 +2607,7 @@ def update_price_chart(n_clicks, n_submit, ticker):
         return go.Figure()
 
     options_data, _, spot_price, _ = get_option_data(ticker, [])
+
     # Добавляем проверку на None
     if options_data is None:
         options_data = pd.DataFrame()
@@ -2833,7 +2834,7 @@ def update_price_chart(n_clicks, n_submit, ticker):
             y=[max_power_strike, max_power_strike],
             mode='lines',
             line=dict(color='#ffdf00', width=line_widths['Max Power']),
-            name=f'Max Power: {max_power_strike:.2f}',
+            name=f'Quant Power: {max_power_strike:.2f}',
             yaxis='y'
         ))
 
@@ -2850,7 +2851,7 @@ def update_price_chart(n_clicks, n_submit, ticker):
     fig.update_layout(
         title=f"{ticker}",
         xaxis=dict(
-            title="Время",
+            title="Time",
             type='date',
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
@@ -2860,7 +2861,7 @@ def update_price_chart(n_clicks, n_submit, ticker):
             fixedrange=True
         ),
         yaxis=dict(
-            title="Цена",
+            title="price",
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
             fixedrange=True
@@ -2876,7 +2877,7 @@ def update_price_chart(n_clicks, n_submit, ticker):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=0.5,
-        text="Max Power",
+        text="Quant Power",
         showarrow=False,
         font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
         textangle=0,
@@ -3015,7 +3016,7 @@ def update_price_chart_simplified(n_clicks, n_submit, ticker):
     fig.update_layout(
         title=f"Support / Resistance {ticker}",
         xaxis=dict(
-            title="Время",
+            title="Time",
             type='date',
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
@@ -3025,7 +3026,7 @@ def update_price_chart_simplified(n_clicks, n_submit, ticker):
             fixedrange=True
         ),
         yaxis=dict(
-            title="Цена",
+            title="Price",
             showgrid=True,
             gridcolor='rgba(128, 128, 128, 0.2)',
             fixedrange=True
@@ -3041,7 +3042,7 @@ def update_price_chart_simplified(n_clicks, n_submit, ticker):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=0.5,
-        text="Max Power",
+        text="Quant Power",
         showarrow=False,
         font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
         textangle=0,
@@ -3124,7 +3125,7 @@ def update_key_levels_chart(ticker):
 
     # Определяем диапазон для всего графика (4% от цены открытия)
     if ticker in ["^SPX", "^NDX", "^RUT", "^DJI", "^VIX"]:
-        chart_range = 0.034  # 4% для индексов
+        chart_range = 0.032  # 4% для индексов
     elif ticker in ["SPY", "QQQ", "DIA", "XSP", "IWM"]:
         chart_range = 0.032  # 4% для ETF
     else:
@@ -3371,7 +3372,7 @@ def update_key_levels_chart(ticker):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=0.5,
-        text="Max Power",
+        text="Quant Power",
         showarrow=False,
         font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
         textangle=0,
@@ -3677,7 +3678,7 @@ def update_oi_volume_chart(n_clicks, n_submit, dates, selected_params, ticker):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=0.5,
-        text="Max Power",
+        text="Quant Power",
         showarrow=False,
         font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
         textangle=0,
@@ -3927,7 +3928,7 @@ def update_oi_volume_price_chart(n_clicks, n_submit, ticker, dates):
     fig.add_annotation(
         xref="paper", yref="paper",
         x=0.5, y=0.5,
-        text="Max Power",
+        text="Quant Power",
         showarrow=False,
         font=dict(size=80, color="rgba(255, 255, 255, 0.1)"),
         textangle=0,
