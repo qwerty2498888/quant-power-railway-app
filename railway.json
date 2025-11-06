@@ -1,11 +1,8 @@
 ﻿{
-  "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "nixpacks"
   },
   "deploy": {
-    "startCommand": "gunicorn app:server --bind 0.0.0.0:$PORT",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
+    "startCommand": "python diagnostic_app.py"
   }
 }
