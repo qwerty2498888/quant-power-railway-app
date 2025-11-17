@@ -10,8 +10,13 @@ import os
 from datetime import datetime
 
 # Инициализация Dash приложения
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
+app = dash.Dash(
+    __name__, suppress_callback_exceptions=True,
+title = 'Quant Trading App',
+meta_tags = [{'name': 'viewport', 'content': 'width=device-width, initial-scale=1.0'}]
+)
 server = app.server
+
 
 # Настройка кэширования
 cache = Cache(app.server, config={
@@ -210,14 +215,15 @@ def get_yfinance_options(ticker, expiration):
 def get_yfinance_spot_price(ticker):
     """Кешированная функция для получения текущей цены из yfinance"""
     try:
-        stock = yf.Ticker(ticker)
+        # Для SPX используем SPY * 10.03
         if ticker == "^SPX":
-            xsp_ticker = yf.Ticker("^XSP")
-            if xsp_ticker.history(period="1d").shape[0] > 0:
-                xsp_price = xsp_ticker.history(period="1d")['Close'].iloc[-1]
-                return xsp_price * 10  # Умножаем цену XSP на 10
+            spy_ticker = yf.Ticker("SPY")
+            spy_data = spy_ticker.history(period="1d")
+            if not spy_data.empty:
+                spy_price = spy_data['Close'].iloc[-1]
+                return spy_price * 10.02  # Умножаем цену SPY на 10.03
 
-            # Стандартная логика для других тикеров
+        # Стандартная логика для других тикеров
         stock = yf.Ticker(ticker)
         if stock.history(period="1d").shape[0] > 0:
             return stock.history(period="1d")['Close'].iloc[-1]
@@ -479,6 +485,62 @@ def add_static_levels_to_chart(fig, resistance_levels, support_levels, market_op
 
     return fig
 
+
+# Страница Signals
+signals_page = html.Div([
+    html.H1("0DTE Options Signals", style={'textAlign': 'center', 'color': 'white'}),
+
+    html.Div([
+        html.Div([
+            html.H3("Current Status", style={'color': 'white'}),
+            html.Div(id='signal-status', style={
+                'padding': '20px',
+                'border-radius': '10px',
+                'background-color': '#252525',
+                'margin-bottom': '20px',
+                'color': 'white'
+            })
+        ], className='dash-container'),
+
+        html.Div([
+            html.H3("Active Position", style={'color': 'white'}),
+            html.Div(id='active-position', style={
+                'padding': '20px',
+                'border-radius': '10px',
+                'background-color': '#252525',
+                'margin-bottom': '20px',
+                'color': 'white'
+            })
+        ], className='dash-container'),
+
+        html.Div([
+            html.H3("Trade Results", style={'color': 'white'}),
+            html.Div(id='trade-results', style={
+                'padding': '20px',
+                'border-radius': '10px',
+                'background-color': '#252525',
+                'margin-bottom': '20px',
+                'color': 'white'
+            })
+        ], className='dash-container'),
+
+        html.Div([
+            html.H3("Market Data", style={'color': 'white'}),
+            html.Div(id='market-data', style={
+                'padding': '20px',
+                'border-radius': '10px',
+                'background-color': '#252525',
+                'color': 'white'
+            })
+        ], className='dash-container')
+    ]),
+
+    dcc.Interval(
+        id='signals-interval',
+        interval=60 * 1000,  # 1 minute
+        n_intervals=0
+    )
+])
 
 oi_volume_page = html.Div([
     html.H1("Open Interest / Volume", style={'textAlign': 'center'}),
@@ -992,15 +1054,15 @@ disclaimer_page = html.Div(
 )
 # Функция для получения исторических данных для ценовых графиков
 def get_historical_data_for_chart(ticker):
-    """Получает исторические данные с учетом замены SPX на XSP*10"""
+    """Получает исторические данные с учетом замены SPX на SPY*10.03"""
     if ticker == "^SPX":
-        # Для SPX используем данные XSP и умножаем на 10
-        xsp_ticker = yf.Ticker("^XSP")
-        data = xsp_ticker.history(period='1d', interval='1m')
+        # Для SPX используем данные SPY и умножаем на 10.03
+        spy_ticker = yf.Ticker("SPY")
+        data = spy_ticker.history(period='1d', interval='1m')
         if not data.empty:
-            # Умножаем все ценовые колонки на 10
+            # Умножаем все ценовые колонки на 10.03
             for col in ['Open', 'High', 'Low', 'Close']:
-                data[col] = data[col] * 10
+                data[col] = data[col] * 10.02
             # Volume оставляем как есть (не умножаем)
         return data
     else:
@@ -1464,6 +1526,9 @@ app.layout = html.Div([
                                      style={'color': 'white', 'text-decoration': 'none'})),
                     html.Li(style={'height': '20px'}),  # Добавляем пустой элемент для отступа
                     html.Li(dcc.Link("Key Levels", href="/key-levels",
+                                     style={'color': 'white', 'text-decoration': 'none'})),
+                    html.Li(style={'height': '20px'}),  # Добавляем пустой элемент для отступа
+                    html.Li(dcc.Link("Signals", href="/signals",
                                      style={'color': 'white', 'text-decoration': 'none'})),
                     html.Li(style={'height': '20px'}),  # Добавляем пустой элемент для отступа
                     html.Li(dcc.Link("P/C Ratio", href="/options-summary",
@@ -3064,6 +3129,8 @@ def display_page(pathname, search):
         return oi_volume_page
     elif pathname == '/options-summary':
         return options_summary_page
+    elif pathname == '/signals':
+        return signals_page
     elif pathname == '/how-to-use-gex':
         return how_to_use_gex_page
     elif pathname == '/disclaimer':
@@ -3084,6 +3151,377 @@ def display_page(pathname, search):
                 child.value = ticker_value
                 break
         return updated_index
+
+
+# Исправленный класс OptionStrategy с правильным расчетом P&L
+class OptionStrategy:
+    def __init__(self):
+        self.active_position = None
+        self.position_open_time = None
+        self.position_close_time = None
+        self.entry_cost = 0  # Стоимость открытия позиции
+        self.exit_cost = 0  # Стоимость закрытия позиции
+        self.trade_history = []
+
+    def calculate_max_power_line(self, options_data, spot_price):
+        """Рассчитывает линию Max Power в диапазоне 1% от текущей цены"""
+        if options_data is None or options_data.empty:
+            return None
+
+        price_range = 0.01  # 1% диапазон
+        lower_limit = spot_price * (1 - price_range)
+        upper_limit = spot_price * (1 + price_range)
+
+        # Создаем копию для безопасного изменения
+        filtered_data = options_data[
+            (options_data['strike'] >= lower_limit) &
+            (options_data['strike'] <= upper_limit)
+            ].copy()
+
+        if filtered_data.empty:
+            return None
+
+        # Используем .loc для безопасного присвоения
+        filtered_data.loc[:, 'Power'] = (
+                (filtered_data['Call OI'] * spot_price / 100 * spot_price * 0.005) +
+                (filtered_data['Put OI'] * spot_price / 100 * spot_price * 0.005) +
+                (filtered_data['Call Volume'] * spot_price / 100 * spot_price * 0.005) +
+                (filtered_data['Put Volume'] * spot_price / 100 * spot_price * 0.005)
+        )
+
+        max_power_strike = filtered_data.loc[filtered_data['Power'].idxmax(), 'strike']
+        return max_power_strike
+
+    def get_option_price(self, ticker, expiration, strike, option_type):
+        """Получает реальную цену опциона из yfinance"""
+        try:
+            stock = yf.Ticker(ticker)
+            option_chain = stock.option_chain(expiration)
+
+            if option_type.upper() == 'CALL':
+                options = option_chain.calls
+            else:
+                options = option_chain.puts
+
+            option_data = options[options['strike'] == strike]
+            if not option_data.empty:
+                # Используем среднюю цену bid-ask для более точной оценки
+                bid = option_data['bid'].iloc[0]
+                ask = option_data['ask'].iloc[0]
+                if pd.notna(bid) and pd.notna(ask):
+                    return (bid + ask) / 2
+                elif pd.notna(bid):
+                    return bid
+                elif pd.notna(ask):
+                    return ask
+                else:
+                    # Если нет bid-ask, используем lastPrice
+                    return option_data['lastPrice'].iloc[0] if pd.notna(option_data['lastPrice'].iloc[0]) else 0
+
+            return 0  # Возвращаем 0 если опцион не найден
+        except Exception as e:
+            print(f"Error getting option price for {strike} {option_type}: {e}")
+            return 0
+
+    def create_broken_wing_butterfly(self, spot_price, max_power_line, expiration):
+        """Создает бабочку со сломанным крылом"""
+        if max_power_line > spot_price:
+            # Call Broken Wing Butterfly (медвежья стратегия)
+            # Продаем ближние коллы, покупаем дальние
+            strike1 = max_power_line - 10  # Дальний колл (покупка)
+            strike2 = max_power_line  # Ближний колл (продажа 2x)
+            strike3 = max_power_line + 5  # Дальний колл (покупка)
+
+            strategy = {
+                'type': 'Call Broken Wing',
+                'direction': 'BEARISH',  # Медвежья стратегия
+                'legs': [
+                    {'action': 'BUY', 'type': 'CALL', 'strike': strike1, 'quantity': 1},
+                    {'action': 'SELL', 'type': 'CALL', 'strike': strike2, 'quantity': 2},
+                    {'action': 'BUY', 'type': 'CALL', 'strike': strike3, 'quantity': 1}
+                ],
+                'max_power_line': max_power_line,
+                'spot_price': spot_price
+            }
+        else:
+            # Put Broken Wing Butterfly (бычья стратегия)
+            # Продаем ближние путы, покупаем дальние
+            strike1 = max_power_line + 10  # Дальний пут (покупка)
+            strike2 = max_power_line  # Ближний пут (продажа 2x)
+            strike3 = max_power_line - 5  # Дальний пут (покупка)
+
+            strategy = {
+                'type': 'Put Broken Wing',
+                'direction': 'BULLISH',  # Бычья стратегия
+                'legs': [
+                    {'action': 'BUY', 'type': 'PUT', 'strike': strike1, 'quantity': 1},
+                    {'action': 'SELL', 'type': 'PUT', 'strike': strike2, 'quantity': 2},
+                    {'action': 'BUY', 'type': 'PUT', 'strike': strike3, 'quantity': 1}
+                ],
+                'max_power_line': max_power_line,
+                'spot_price': spot_price
+            }
+
+        # Рассчитываем стоимость стратегии
+        net_cost = self.calculate_strategy_cost(strategy, expiration)
+        strategy['net_cost'] = net_cost
+        strategy['is_credit'] = net_cost < 0  # Кредитная стратегия если отрицательная стоимость
+
+        return strategy
+
+    def calculate_strategy_cost(self, strategy, expiration):
+        """Рассчитывает чистую стоимость стратегии (дебет/кредит)"""
+        total_cost = 0
+
+        for leg in strategy['legs']:
+            price = self.get_option_price("^SPX", expiration, leg['strike'], leg['type'])
+
+            # Для SPX множитель 100
+            leg_cost = price * leg['quantity'] * 100
+
+            if leg['action'] == 'BUY':
+                total_cost += leg_cost  # Дебет при покупке
+            else:  # SELL
+                total_cost -= leg_cost  # Кредит при продаже
+
+        return total_cost
+
+    def should_open_position(self):
+        """Проверяет, нужно ли открывать позицию (30 минут после открытия)"""
+        now = datetime.now()
+        market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+
+        # Позиция открывается через 30 минут после открытия рынка
+        open_time = market_open + timedelta(minutes=30)
+
+        if now >= open_time and self.active_position is None:
+            # Проверяем, что сегодня рабочий день
+            if now.weekday() < 5:  # Пн-Пт
+                return True
+
+        return False
+
+    def should_close_position(self, current_price):
+        """Проверяет, нужно ли закрывать позицию"""
+        if self.active_position:
+            max_power_line = self.active_position['max_power_line']
+            # Закрываем при достижении линии Max Power
+            if abs(current_price - max_power_line) <= 1.0:  # 1 пункт допуск
+                return True
+
+        return False
+
+
+# Глобальный объект для управления стратегиями
+strategy_manager = OptionStrategy()
+
+
+# Исправленный callback для страницы Signals
+@app.callback(
+    [Output('signal-status', 'children'),
+     Output('active-position', 'children'),
+     Output('trade-results', 'children'),
+     Output('market-data', 'children')],
+    [Input('signals-interval', 'n_intervals')]
+)
+def update_signals(n_intervals):
+    # Получаем текущие данные SPX
+    ticker = "^SPX"
+    options_data, available_dates, spot_price, stock = get_option_data(ticker, [])
+
+    if spot_price is None or options_data is None:
+        error_msg = html.P("Ошибка загрузки данных", style={'color': 'red'})
+        return [error_msg] * 4
+
+    # Получаем ближайшую экспирацию (0DTE)
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    expiration = today_str if today_str in available_dates else available_dates[0] if available_dates else None
+
+    if not expiration:
+        error_msg = html.P("Нет данных по опционам", style={'color': 'red'})
+        return [error_msg] * 4
+
+    # Рассчитываем линию Max Power
+    max_power_line = strategy_manager.calculate_max_power_line(options_data, spot_price)
+
+    # Проверяем условия для открытия/закрытия позиций
+    current_time = datetime.now()
+
+    # Статус сигнала
+    status_components = []
+
+    # Проверяем условие открытия
+    if strategy_manager.should_open_position() and max_power_line and not strategy_manager.active_position:
+        # Открываем новую позицию
+        strategy = strategy_manager.create_broken_wing_butterfly(spot_price, max_power_line, expiration)
+
+        if strategy['net_cost'] is not None:
+            strategy_manager.active_position = strategy
+            strategy_manager.position_open_time = current_time
+            strategy_manager.entry_cost = strategy['net_cost']
+
+            status_components.append(
+                html.P("🎯 ПОЗИЦИЯ ОТКРЫТА", style={'color': '#00ff00', 'font-weight': 'bold', 'font-size': '20px'})
+            )
+
+    # Проверяем условие закрытия
+    if strategy_manager.active_position and strategy_manager.should_close_position(spot_price):
+        # Закрываем позицию
+        current_cost = strategy_manager.calculate_strategy_cost(
+            strategy_manager.active_position, expiration
+        )
+
+        if current_cost is not None:
+            strategy_manager.exit_cost = current_cost
+
+            # Правильный расчет P&L
+            if strategy_manager.active_position['is_credit']:
+                # Для кредитных стратегий: P&L = (стоимость открытия - стоимость закрытия)
+                # Открыли с кредитом, закрываем с дебетом (или меньшим кредитом)
+                pnl = strategy_manager.entry_cost - current_cost
+            else:
+                # Для дебетовых стратегий: P&L = (стоимость закрытия - стоимость открытия)
+                # Открыли с дебетом, закрываем с кредитом (или большим дебетом)
+                pnl = current_cost - strategy_manager.entry_cost
+
+            # Сохраняем в историю
+            trade_record = {
+                'entry_time': strategy_manager.position_open_time,
+                'exit_time': current_time,
+                'strategy_type': strategy_manager.active_position['type'],
+                'direction': strategy_manager.active_position['direction'],
+                'entry_cost': strategy_manager.entry_cost,
+                'exit_cost': current_cost,
+                'pnl': pnl,
+                'max_power_line': strategy_manager.active_position['max_power_line'],
+                'spot_price_at_open': strategy_manager.active_position['spot_price']
+            }
+            strategy_manager.trade_history.append(trade_record)
+
+            # Сбрасываем активную позицию
+            strategy_manager.active_position = None
+            strategy_manager.position_open_time = None
+
+    # Формируем вывод статуса
+    market_open_time = current_time.replace(hour=9, minute=30, second=0, microsecond=0)
+    time_since_open = current_time - market_open_time
+
+    status_components.extend([
+        html.P(f"🕒 Время: {current_time.strftime('%H:%M:%S')}"),
+        html.P(f"📊 SPX: {spot_price:.2f}"),
+        html.P(f"🎯 Max Power Line: {max_power_line:.2f}" if max_power_line else "🎯 Max Power Line: Недоступно"),
+        html.P(f"📅 Экспирация: {expiration}"),
+        html.P(f"⏰ После открытия: {time_since_open.seconds // 60} минут")
+    ])
+
+    if strategy_manager.should_open_position() and not strategy_manager.active_position and max_power_line:
+        # Показываем потенциальную стратегию
+        potential_strategy = strategy_manager.create_broken_wing_butterfly(spot_price, max_power_line, expiration)
+        cost_type = "КРЕДИТ" if potential_strategy['is_credit'] else "ДЕБЕТ"
+        cost_color = '#00ff00' if potential_strategy['is_credit'] else '#ff9900'
+
+        status_components.extend([
+            html.P("✅ Условия для открытия позиции выполнены", style={'color': '#00ff00'}),
+            html.P(f"Потенциальная стратегия: {potential_strategy['type']}"),
+            html.P(f"Направление: {potential_strategy['direction']}"),
+            html.P(f"Стоимость открытия: ${abs(potential_strategy['net_cost']):.2f} ({cost_type})",
+                   style={'color': cost_color})
+        ])
+    elif not strategy_manager.should_open_position() and not strategy_manager.active_position:
+        status_components.append(
+            html.P("⏳ Ожидание открытия рынка...", style={'color': 'yellow'})
+        )
+
+    # Активная позиция
+    position_components = []
+    if strategy_manager.active_position:
+        position = strategy_manager.active_position
+        current_value = strategy_manager.calculate_strategy_cost(position, expiration)
+        unrealized_pnl = 0
+
+        if position['is_credit']:
+            unrealized_pnl = strategy_manager.entry_cost - current_value
+        else:
+            unrealized_pnl = current_value - strategy_manager.entry_cost
+
+        pnl_color = '#00ff00' if unrealized_pnl >= 0 else '#ff0000'
+        cost_type = "Кредит" if position['is_credit'] else "Дебет"
+
+        position_components = [
+            html.P(f"🎯 АКТИВНАЯ ПОЗИЦИЯ", style={'color': '#00ff00', 'font-weight': 'bold'}),
+            html.P(f"Тип: {position['type']}"),
+            html.P(f"Направление: {position['direction']}"),
+            html.P(f"Max Power Line: {position['max_power_line']:.2f}"),
+            html.P(f"Стоимость открытия: ${abs(position['net_cost']):.2f} ({cost_type})"),
+            html.P(f"Текущая стоимость: ${abs(current_value):.2f}"),
+            html.P(f"Нереализованный P&L: ${unrealized_pnl:.2f}", style={'color': pnl_color}),
+            html.P(f"Время открытия: {strategy_manager.position_open_time.strftime('%H:%M:%S')}"),
+            html.Hr(),
+            html.P("Состав позиции:", style={'font-weight': 'bold'})
+        ]
+
+        for i, leg in enumerate(position['legs']):
+            leg_price = strategy_manager.get_option_price("^SPX", expiration, leg['strike'], leg['type'])
+            position_components.append(
+                html.P(f"{leg['action']} {leg['quantity']} {leg['strike']} {leg['type']} @ ${leg_price:.2f}")
+            )
+    else:
+        position_components = [
+            html.P("📭 Нет активных позиций", style={'color': 'gray'})
+        ]
+
+    # Результаты торгов
+    results_components = []
+    if strategy_manager.trade_history:
+        total_pnl = sum(trade['pnl'] for trade in strategy_manager.trade_history)
+        wins = sum(1 for trade in strategy_manager.trade_history if trade['pnl'] > 0)
+        losses = len(strategy_manager.trade_history) - wins
+        win_rate = (wins / len(strategy_manager.trade_history)) * 100 if strategy_manager.trade_history else 0
+
+        results_components = [
+            html.P(f"📈 СТАТИСТИКА СДЕЛОК", style={'font-weight': 'bold'}),
+            html.P(f"Всего сделок: {len(strategy_manager.trade_history)}"),
+            html.P(f"Прибыльных: {wins} ({win_rate:.1f}%)"),
+            html.P(f"Убыточных: {losses}"),
+            html.P(f"Общий P&L: ${total_pnl:.2f}",
+                   style={'color': '#00ff00' if total_pnl > 0 else '#ff0000', 'font-weight': 'bold'}),
+            html.Hr()
+        ]
+
+        # Последние 5 сделок
+        recent_trades = strategy_manager.trade_history[-5:]
+        for trade in reversed(recent_trades):
+            pnl_color = '#00ff00' if trade['pnl'] > 0 else '#ff0000'
+            results_components.extend([
+                html.P(f"🕒 {trade['entry_time'].strftime('%H:%M')} → {trade['exit_time'].strftime('%H:%M')}"),
+                html.P(f"📊 {trade['strategy_type']} ({trade['direction']})"),
+                html.P(f"💰 P&L: ${trade['pnl']:.2f}", style={'color': pnl_color, 'font-weight': 'bold'}),
+                html.Hr()
+            ])
+    else:
+        results_components = [
+            html.P("📊 Сделок сегодня не было", style={'color': 'gray'})
+        ]
+
+    # Рыночные данные
+    total_call_oi = options_data['Call OI'].sum()
+    total_put_oi = options_data['Put OI'].sum()
+    pc_ratio = total_put_oi / total_call_oi if total_call_oi > 0 else 0
+
+    market_components = [
+        html.P("📊 ДАННЫЕ ОПЦИОНОВ", style={'font-weight': 'bold'}),
+        html.P(f"Call OI: {total_call_oi:,}"),
+        html.P(f"Put OI: {total_put_oi:,}"),
+        html.P(f"Call Volume: {options_data['Call Volume'].sum():,}"),
+        html.P(f"Put Volume: {options_data['Put Volume'].sum():,}"),
+        html.P(f"P/C Ratio: {pc_ratio:.2f}"),
+        html.P(f"Total OI: {total_call_oi + total_put_oi:,}"),
+    ]
+
+    return status_components, position_components, results_components, market_components
+
+# Глобальный объект для управления стратегиями
+strategy_manager = OptionStrategy()
 
 
 # Callback для обновления графика на странице "Key Levels"
